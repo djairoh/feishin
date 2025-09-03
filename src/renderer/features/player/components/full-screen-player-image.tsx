@@ -244,6 +244,9 @@ export const FullScreenPlayerImage = () => {
                     {currentSong?.releaseYear && (
                         <Badge variant="transparent">{currentSong?.releaseYear}</Badge>
                     )}
+                    {currentSong?.bpm && (
+                        <Badge size="lg">{currentSong?.bpm} BPM</Badge>
+                    )}
                     {currentSong?.genres?.map((genre) => (
                         <Badge size="lg">
                             {genre.name}
