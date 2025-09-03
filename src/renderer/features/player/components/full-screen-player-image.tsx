@@ -237,12 +237,15 @@ export const FullScreenPlayerImage = () => {
                         </Fragment>
                     ))}
                 </Text>
-                <Group justify="center" mt="sm">
-                    {currentSong?.container && (
-                        <Badge variant="transparent">{currentSong?.container}</Badge>
-                    )}
+                <Group
+                    mt="sm"
+                    position="center"
+                >
                     {currentSong?.releaseYear && (
                         <Badge variant="transparent">{currentSong?.releaseYear}</Badge>
+                    )}
+                    {currentSong?.bpm && (
+                        <Badge size="lg">{currentSong?.bpm} BPM</Badge>
                     )}
                     {currentSong?.genres?.map((genre) => (
                         <Badge size="lg">
