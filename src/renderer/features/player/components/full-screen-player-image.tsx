@@ -245,10 +245,10 @@ export const FullScreenPlayerImage = () => {
                         <Badge variant="transparent">{currentSong?.releaseYear}</Badge>
                     )}
                     {currentSong?.bpm && (
-                        <Badge size="lg">{currentSong?.bpm} BPM</Badge>
+                        <Badge variant="transparent" size="lg">{currentSong?.bpm} BPM</Badge>
                     )}
                     {currentSong?.genres?.map((genre) => (
-                        <Badge size="lg">
+                        <Badge variant="transparent" size="lg">
                             {genre.name}
                         </Badge>
                     ))}
