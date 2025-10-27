@@ -239,7 +239,7 @@ export const FullScreenPlayerImage = () => {
                 </Text>
                 <Group
                     mt="sm"
-                    position="center"
+                    justify="center"
                 >
                     {currentSong?.releaseYear && (
                         <Badge variant="transparent">{currentSong?.releaseYear}</Badge>
