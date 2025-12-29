@@ -1,5 +1,3 @@
-import { useForm } from '@mantine/form';
-import { useFocusTrap } from '@mantine/hooks';
 import { closeAllModals } from '@mantine/modals';
 import isElectron from 'is-electron';
 import { nanoid } from 'nanoid/non-secure';
@@ -11,9 +9,9 @@ import JellyfinIcon from '/@/renderer/features/servers/assets/jellyfin.png';
 import NavidromeIcon from '/@/renderer/features/servers/assets/navidrome.png';
 import SubsonicIcon from '/@/renderer/features/servers/assets/opensubsonic.png';
 import { useAuthStoreActions } from '/@/renderer/store';
-import { Button } from '/@/shared/components/button/button';
 import { Checkbox } from '/@/shared/components/checkbox/checkbox';
 import { Group } from '/@/shared/components/group/group';
+import { ModalButton } from '/@/shared/components/modal/model-shared';
 import { Paper } from '/@/shared/components/paper/paper';
 import { PasswordInput } from '/@/shared/components/password-input/password-input';
 import { SegmentedControl } from '/@/shared/components/segmented-control/segmented-control';
@@ -21,7 +19,9 @@ import { Stack } from '/@/shared/components/stack/stack';
 import { TextInput } from '/@/shared/components/text-input/text-input';
 import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
-import { AuthenticationResponse, ServerListItem } from '/@/shared/types/domain-types';
+import { useFocusTrap } from '/@/shared/hooks/use-focus-trap';
+import { useForm } from '/@/shared/hooks/use-form';
+import { AuthenticationResponse, ServerListItemWithCredential } from '/@/shared/types/domain-types';
 import { DiscoveredServerItem, ServerType, toServerType } from '/@/shared/types/types';
 
 const autodiscover = isElectron() ? window.api.autodiscover : null;
@@ -97,7 +97,8 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
     const form = useForm({
         initialValues: {
             legacyAuth: false,
-            name: (localSettings ? localSettings.env.SERVER_NAME : window.SERVER_NAME) ?? '',
+            name:
+                (localSettings ? localSettings.env.SERVER_NAME : window.SERVER_NAME) || 'My Server',
             password: '',
             preferInstantMix: undefined,
             savePassword: undefined,
@@ -111,13 +112,7 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
     });
 
     // server lock for web is only true if lock is true *and* all other properties are set
-    const serverLock =
-        (localSettings
-            ? !!localSettings.env.SERVER_LOCK
-            : !!window.SERVER_LOCK &&
-              window.SERVER_TYPE &&
-              window.SERVER_NAME &&
-              window.SERVER_URL) || false;
+    const isServerLock = Boolean(window.SERVER_LOCK) || false;
 
     const isSubmitDisabled = !form.values.name || !form.values.url || !form.values.username;
 
@@ -152,9 +147,10 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                 });
             }
 
-            const serverItem: ServerListItem = {
+            const serverItem: ServerListItemWithCredential = {
                 credential: data.credential,
                 id: nanoid(),
+                isAdmin: data.isAdmin,
                 name: values.name,
                 type: values.type as ServerType,
                 url: values.url.replace(/\/$/, ''),
@@ -225,7 +221,7 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                 <Stack m={5} ref={focusTrapRef}>
                     <SegmentedControl
                         data={ALL_SERVERS}
-                        disabled={Boolean(serverLock)}
+                        disabled={isServerLock}
                         p="md"
                         withItemsBorders={false}
                         {...form.getInputProps('type')}
@@ -233,19 +229,21 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                     <Group grow>
                         <TextInput
                             data-autofocus
-                            disabled={Boolean(serverLock)}
+                            disabled={isServerLock}
                             label={t('form.addServer.input', {
                                 context: 'name',
                                 postProcess: 'titleCase',
                             })}
+                            required
                             {...form.getInputProps('name')}
                         />
                         <TextInput
-                            disabled={Boolean(serverLock)}
+                            disabled={isServerLock}
                             label={t('form.addServer.input', {
                                 context: 'url',
                                 postProcess: 'titleCase',
                             })}
+                            required
                             {...form.getInputProps('url')}
                         />
                     </Group>
@@ -254,6 +252,7 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                             context: 'username',
                             postProcess: 'titleCase',
                         })}
+                        required
                         {...form.getInputProps('username')}
                     />
                     <PasswordInput
@@ -300,18 +299,16 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                     )}
                     <Group grow justify="flex-end">
                         {onCancel && (
-                            <Button onClick={onCancel} variant="subtle">
-                                {t('common.cancel', { postProcess: 'titleCase' })}
-                            </Button>
+                            <ModalButton onClick={onCancel}>{t('common.cancel')}</ModalButton>
                         )}
-                        <Button
+                        <ModalButton
                             disabled={isSubmitDisabled}
                             loading={isLoading}
                             type="submit"
                             variant="filled"
                         >
-                            {t('common.add', { postProcess: 'titleCase' })}
-                        </Button>
+                            {t('common.add')}
+                        </ModalButton>
                     </Group>
                 </Stack>
             </form>

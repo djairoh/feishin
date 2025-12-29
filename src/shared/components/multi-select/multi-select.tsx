@@ -23,9 +23,18 @@ export const MultiSelect = ({
             classNames={{
                 dropdown: styles.dropdown,
                 input: styles.input,
+                label: styles.label,
                 option: styles.option,
+                pill: styles.pill,
+                pillsList: styles.pillsList,
                 root: styles.root,
                 ...classNames,
+            }}
+            clearButtonProps={{
+                classNames: {
+                    root: styles.clearButton,
+                },
+                variant: 'transparent',
             }}
             style={{ maxWidth, width }}
             variant={variant}

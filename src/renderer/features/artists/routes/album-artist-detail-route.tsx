@@ -1,18 +1,26 @@
-import { useRef } from 'react';
+import { useSuspenseQuery } from '@tanstack/react-query';
+import { Suspense, useRef } from 'react';
 import { useParams } from 'react-router';
 
+import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { NativeScrollArea } from '/@/renderer/components/native-scroll-area/native-scroll-area';
+import { artistsQueries } from '/@/renderer/features/artists/api/artists-api';
 import { AlbumArtistDetailContent } from '/@/renderer/features/artists/components/album-artist-detail-content';
 import { AlbumArtistDetailHeader } from '/@/renderer/features/artists/components/album-artist-detail-header';
-import { useAlbumArtistDetail } from '/@/renderer/features/artists/queries/album-artist-detail-query';
-import { usePlayQueueAdd } from '/@/renderer/features/player';
-import { AnimatedPage, LibraryHeaderBar } from '/@/renderer/features/shared';
-import { useFastAverageColor } from '/@/renderer/hooks';
-import { useCurrentServer } from '/@/renderer/store';
-import { useGeneralSettings, usePlayButtonBehavior } from '/@/renderer/store/settings.store';
+import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
+import {
+    LibraryBackgroundImage,
+    LibraryBackgroundOverlay,
+} from '/@/renderer/features/shared/components/library-background-overlay';
+import { LibraryContainer } from '/@/renderer/features/shared/components/library-container';
+import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library-header-bar';
+import { PageErrorBoundary } from '/@/renderer/features/shared/components/page-error-boundary';
+import { useFastAverageColor, useWaitForColorCalculation } from '/@/renderer/hooks';
+import { useCurrentServer, useGeneralSettings } from '/@/renderer/store';
+import { Spinner } from '/@/shared/components/spinner/spinner';
 import { LibraryItem } from '/@/shared/types/domain-types';
 
-const AlbumArtistDetailRoute = () => {
+const AlbumArtistDetailRouteContent = () => {
     const scrollAreaRef = useRef<HTMLDivElement>(null);
     const headerRef = useRef<HTMLDivElement>(null);
     const server = useCurrentServer();
@@ -25,42 +33,60 @@ const AlbumArtistDetailRoute = () => {
 
     const routeId = (artistId || albumArtistId) as string;
 
-    const handlePlayQueueAdd = usePlayQueueAdd();
-    const playButtonBehavior = usePlayButtonBehavior();
-    const detailQuery = useAlbumArtistDetail({
-        query: { id: routeId },
-        serverId: server?.id,
+    const detailQuery = useSuspenseQuery(
+        artistsQueries.albumArtistDetail({ query: { id: routeId }, serverId: server?.id }),
+    );
+
+    const imageUrl = useItemImageUrl({
+        id: detailQuery.data?.imageId || undefined,
+        imageUrl: detailQuery.data?.imageUrl,
+        itemType: LibraryItem.ALBUM_ARTIST,
+        type: 'header',
     });
 
-    const { background: backgroundColor, colorId } = useFastAverageColor({
+    const libraryBackgroundImageUrl = useItemImageUrl({
+        id: detailQuery.data?.imageId || undefined,
+        itemType: LibraryItem.ALBUM_ARTIST,
+        type: 'itemCard',
+    });
+
+    const selectedImageUrl = imageUrl || detailQuery.data?.imageUrl;
+
+    const { background: backgroundColor, isLoading: isColorLoading } = useFastAverageColor({
         id: artistId,
-        src: detailQuery.data?.imageUrl,
-        srcLoaded: !detailQuery.isLoading,
+        src: selectedImageUrl,
+        srcLoaded: true,
     });
 
-    const backgroundUrl = detailQuery.data?.imageUrl || '';
-    const background = (artistBackground && `url(${backgroundUrl})`) || backgroundColor;
+    const background = backgroundColor;
 
-    const handlePlay = () => {
-        handlePlayQueueAdd?.({
-            byItemType: {
-                id: [routeId],
-                type: LibraryItem.ALBUM_ARTIST,
-            },
-            playType: playButtonBehavior,
-        });
-    };
+    const showBlurredImage = artistBackground;
+
+    const { isReady } = useWaitForColorCalculation({
+        hasImage: !!selectedImageUrl,
+        isLoading: isColorLoading,
+        routeId,
+        showBlurredImage,
+    });
+
+    if (!isReady) {
+        return <Spinner container />;
+    }
 
     return (
         <AnimatedPage key={`album-artist-detail-${routeId}`}>
             <NativeScrollArea
                 pageHeaderProps={{
-                    backgroundColor: background,
+                    backgroundColor: backgroundColor || undefined,
                     children: (
                         <LibraryHeaderBar>
-                            <LibraryHeaderBar.PlayButton onClick={handlePlay} />
+                            <LibraryHeaderBar.PlayButton
+                                ids={[routeId]}
+                                itemType={LibraryItem.ALBUM_ARTIST}
+                                variant="default"
+                            />
                             <LibraryHeaderBar.Title>
-                                {detailQuery?.data?.name}
+                                {detailQuery.data?.name}
                             </LibraryHeaderBar.Title>
                         </LibraryHeaderBar>
                     ),
@@ -69,18 +95,44 @@ const AlbumArtistDetailRoute = () => {
                 }}
                 ref={scrollAreaRef}
             >
-                <AlbumArtistDetailHeader
-                    background={{
-                        background,
-                        blur: (artistBackground && artistBackgroundBlur) || 0,
-                        loading: !backgroundColor || colorId !== artistId,
-                    }}
-                    ref={headerRef}
-                />
-                <AlbumArtistDetailContent background={background} />
+                {showBlurredImage ? (
+                    <LibraryBackgroundImage
+                        blur={artistBackgroundBlur}
+                        headerRef={headerRef}
+                        imageUrl={libraryBackgroundImageUrl || ''}
+                    />
+                ) : (
+                    <LibraryBackgroundOverlay backgroundColor={background} headerRef={headerRef} />
+                )}
+                <LibraryContainer>
+                    <AlbumArtistDetailHeader ref={headerRef as React.Ref<HTMLDivElement>} />
+                    <AlbumArtistDetailContent />
+                </LibraryContainer>
             </NativeScrollArea>
         </AnimatedPage>
     );
 };
 
-export default AlbumArtistDetailRoute;
+const AlbumArtistDetailRoute = () => {
+    const { albumArtistId, artistId } = useParams() as {
+        albumArtistId?: string;
+        artistId?: string;
+    };
+    const routeId = (artistId || albumArtistId) as string;
+
+    return (
+        <Suspense fallback={<Spinner container />} key={`album-artist-detail-suspense-${routeId}`}>
+            <AlbumArtistDetailRouteContent />
+        </Suspense>
+    );
+};
+
+const AlbumArtistDetailRouteWithBoundary = () => {
+    return (
+        <PageErrorBoundary>
+            <AlbumArtistDetailRoute />
+        </PageErrorBoundary>
+    );
+};
+
+export default AlbumArtistDetailRouteWithBoundary;

@@ -94,5 +94,25 @@ export const CacheSettings = () => {
         },
     ];
 
-    return <SettingsSection divider={false} options={options} />;
+    const handleOpenApplicationDirectory = async () => {
+        if (isElectron() && window.api?.utils) {
+            await window.api.utils.openApplicationDirectory();
+        }
+    };
+
+    return (
+        <>
+            <SettingsSection
+                options={options}
+                title={t('page.setting.cache', { postProcess: 'sentenceCase' })}
+            />
+            {isElectron() && (
+                <Button onClick={handleOpenApplicationDirectory} variant="default">
+                    {t('action.openApplicationDirectory', {
+                        postProcess: 'sentenceCase',
+                    })}
+                </Button>
+            )}
+        </>
+    );
 };

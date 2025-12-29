@@ -1,5 +1,4 @@
-import { closeAllModals, openModal } from '@mantine/modals';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { SettingsOptions } from '/@/renderer/features/settings/components/settings-option';
@@ -7,7 +6,6 @@ import { useCssSettings, useSettingsStoreActions } from '/@/renderer/store';
 import { sanitizeCss } from '/@/renderer/utils/sanitize';
 import { Button } from '/@/shared/components/button/button';
 import { Code } from '/@/shared/components/code/code';
-import { ConfirmModal } from '/@/shared/components/modal/modal';
 import { Switch } from '/@/shared/components/switch/switch';
 import { Text } from '/@/shared/components/text/text';
 import { Textarea } from '/@/shared/components/textarea/textarea';
@@ -30,28 +28,12 @@ export const StylesSettings = () => {
         });
     };
 
-    const handleResetToDefault = () => {
-        setSettings({
-            css: {
-                content,
-                enabled: true,
-            },
-        });
-        closeAllModals();
-    };
-
-    const openConfirmModal = () => {
-        openModal({
-            children: (
-                <ConfirmModal onConfirm={handleResetToDefault}>
-                    <Text color="red !important">
-                        {t('setting.customCssNotice', { postProcess: 'sentenceCase' })}
-                    </Text>
-                </ConfirmModal>
-            ),
-            title: t('setting.customCssEnable', { postProcess: 'sentenceCase' }),
-        });
-    };
+    useEffect(() => {
+        if (content !== css) {
+            setCss(content);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- Reason: This is to only fire if an external source updates the stores css.content
+    }, [content]);
 
     return (
         <>
@@ -60,16 +42,12 @@ export const StylesSettings = () => {
                     <Switch
                         checked={enabled}
                         onChange={(e) => {
-                            if (!e.currentTarget.checked) {
-                                setSettings({
-                                    css: {
-                                        content,
-                                        enabled: false,
-                                    },
-                                });
-                            } else {
-                                openConfirmModal();
-                            }
+                            setSettings({
+                                css: {
+                                    content,
+                                    enabled: e.currentTarget.checked,
+                                },
+                            });
                         }}
                     />
                 }
@@ -77,6 +55,7 @@ export const StylesSettings = () => {
                     context: 'description',
                     postProcess: 'sentenceCase',
                 })}
+                note={t('setting.customCssNotice', { postProcess: 'sentenceCase' })}
                 title={t('setting.customCssEnable', { postProcess: 'sentenceCase' })}
             />
             {enabled && (

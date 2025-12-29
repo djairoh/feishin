@@ -1,5 +1,65 @@
 import { z } from 'zod';
 
+export enum JFAlbumArtistListSort {
+    ALBUM = 'Album,SortName',
+    DURATION = 'Runtime,AlbumArtist,Album,SortName',
+    NAME = 'SortName,Name',
+    RANDOM = 'Random,SortName',
+    RECENTLY_ADDED = 'DateCreated,SortName',
+    RELEASE_DATE = 'PremiereDate,AlbumArtist,Album,SortName',
+}
+
+export enum JFAlbumListSort {
+    ALBUM_ARTIST = 'AlbumArtist,SortName',
+    COMMUNITY_RATING = 'CommunityRating,SortName',
+    CRITIC_RATING = 'CriticRating,SortName',
+    NAME = 'SortName',
+    PLAY_COUNT = 'PlayCount',
+    RANDOM = 'Random,SortName',
+    RECENTLY_ADDED = 'DateCreated,SortName',
+    RELEASE_DATE = 'ProductionYear,PremiereDate,SortName',
+}
+
+export enum JFArtistListSort {
+    ALBUM = 'Album,SortName',
+    DURATION = 'Runtime,AlbumArtist,Album,SortName',
+    NAME = 'SortName,Name',
+    RANDOM = 'Random,SortName',
+    RECENTLY_ADDED = 'DateCreated,SortName',
+    RELEASE_DATE = 'PremiereDate,AlbumArtist,Album,SortName',
+}
+
+export enum JFGenreListSort {
+    NAME = 'SortName',
+}
+
+export enum JFPlaylistListSort {
+    ALBUM_ARTIST = 'AlbumArtist,SortName',
+    DURATION = 'Runtime',
+    NAME = 'SortName',
+    RECENTLY_ADDED = 'DateCreated,SortName',
+    SONG_COUNT = 'ChildCount',
+}
+
+export enum JFSongListSort {
+    ALBUM = 'Album,SortName',
+    ALBUM_ARTIST = 'AlbumArtist,Album,SortName',
+    ARTIST = 'Artist,Album,SortName',
+    COMMUNITY_RATING = 'CommunityRating,SortName',
+    DURATION = 'Runtime,AlbumArtist,Album,SortName',
+    NAME = 'Name',
+    PLAY_COUNT = 'PlayCount,SortName',
+    RANDOM = 'Random,SortName',
+    RECENTLY_ADDED = 'DateCreated,SortName',
+    RECENTLY_PLAYED = 'DatePlayed,SortName',
+    RELEASE_DATE = 'PremiereDate,AlbumArtist,Album,SortName',
+}
+
+export enum JFSortOrder {
+    ASC = 'Ascending',
+    DESC = 'Descending',
+}
+
 const sortOrderValues = ['Ascending', 'Descending'] as const;
 
 const jfExternal = {
@@ -48,6 +108,7 @@ const baseParameters = z.object({
     ExcludeItemIds: z.string().optional(),
     ExcludeItemTypes: z.string().optional(),
     Fields: z.string().optional(),
+    FolderId: z.string().optional(),
     ImageTypeLimit: z.number().optional(),
     IncludeArtists: z.boolean().optional(),
     IncludeGenres: z.boolean().optional(),
@@ -192,6 +253,7 @@ const sessionInfo = z.object({
         CanSeek: z.boolean(),
         IsMuted: z.boolean(),
         IsPaused: z.boolean(),
+        PositionTicks: z.number().optional(),
         RepeatMode: z.string(),
     }),
     RemoteEndPoint: z.string(),
@@ -426,6 +488,7 @@ const song = z.object({
     MediaType: z.string(),
     Name: z.string(),
     NormalizationGain: z.number().optional(),
+    ParentId: z.string().optional(),
     ParentIndexNumber: z.number(),
     People: participant.array().optional(),
     PlaylistItemId: z.string().optional(),
@@ -434,7 +497,7 @@ const song = z.object({
     ProviderIds: providerIds.optional(),
     RunTimeTicks: z.number(),
     ServerId: z.string(),
-    SortName: z.string(),
+    SortName: z.string().optional(),
     Tags: z.string().array().optional(),
     Type: z.string(),
     UserData: userData.optional(),
@@ -460,6 +523,11 @@ const albumArtist = z.object({
     SongCount: z.number().optional(),
     Type: z.string(),
     UserData: userData.optional(),
+});
+
+const studio = z.object({
+    Id: z.string(),
+    Name: z.string(),
 });
 
 const albumDetailParameters = baseParameters;
@@ -492,6 +560,7 @@ const album = z.object({
     RunTimeTicks: z.number(),
     ServerId: z.string(),
     Songs: z.array(song).optional(), // This is not a native Jellyfin property -- this is used for combined album detail
+    Studios: z.array(studio),
     Tags: z.string().array().optional(),
     Type: z.string(),
     UserData: userData.optional(),
@@ -711,6 +780,56 @@ const filters = z.object({
     Years: z.number().array().optional(),
 });
 
+const folder = z.object({
+    BackdropImageTags: z.array(z.string()),
+    ChannelId: z.null(),
+    CollectionType: z.string(),
+    Id: z.string(),
+    ImageBlurHashes: imageBlurHashes,
+    ImageTags: imageTags,
+    IsFolder: z.boolean(),
+    LocationType: z.string(),
+    MediaType: z.string(),
+    Name: z.string(),
+    ParentId: z.string().optional(),
+    ServerId: z.string(),
+    Type: z.string(),
+    UserData: userData.optional(),
+});
+
+const folderList = pagination.extend({
+    Items: z.array(folder),
+});
+
+const folderParameters = z.object({
+    Fields: z.string().optional(),
+    ParentId: z.string().optional(),
+    SortBy: z.string().optional(),
+    SortOrder: z.enum(sortOrderValues).optional(),
+});
+
+const queueItem = z.object({
+    Id: z.string(),
+    PlaylistItemId: z.string().optional(),
+});
+
+const saveQueueParameters = scrobbleParameters.merge(
+    z.object({
+        NowPlayingQueue: z.array(queueItem),
+        PlaylistItemId: z.string().optional(),
+    }),
+);
+
+const getQueueParameters = z.object({});
+
+const getSessions = z.array(
+    sessionInfo.merge(
+        z.object({
+            PlaylistItemId: z.string().optional(),
+        }),
+    ),
+);
+
 export const jfType = {
     _enum: {
         albumArtistList: albumArtistListSort,
@@ -733,11 +852,14 @@ export const jfType = {
         deletePlaylist: deletePlaylistParameters,
         favorite: favoriteParameters,
         filterList: filterListParameters,
+        folder: folderParameters,
         genreList: genreListParameters,
+        getQueue: getQueueParameters,
         musicFolderList: musicFolderListParameters,
         playlistDetail: playlistDetailParameters,
         playlistList: playlistListParameters,
         removeFromPlaylist: removeFromPlaylistParameters,
+        saveQueue: saveQueueParameters,
         scrobble: scrobbleParameters,
         search: searchParameters,
         similarArtistList: similarArtistListParameters,
@@ -758,10 +880,14 @@ export const jfType = {
         error,
         favorite,
         filters,
+        folder,
+        folderList,
         genre,
         genreList,
+        getSessions,
         lyrics,
         moveItem,
+        musicFolder,
         musicFolderList,
         playlist,
         playlistList,

@@ -11,7 +11,7 @@ import { useAuthStore } from '/@/renderer/store';
 import { ndType } from '/@/shared/api/navidrome/navidrome-types';
 import { resultWithHeaders } from '/@/shared/api/utils';
 import { toast } from '/@/shared/components/toast/toast';
-import { ServerListItem } from '/@/shared/types/domain-types';
+import { ServerListItemWithCredential } from '/@/shared/types/domain-types';
 
 const localSettings = isElectron() ? window.api.localSettings : null;
 
@@ -123,6 +123,14 @@ export const contract = c.router({
             500: resultWithHeaders(ndType._response.error),
         },
     },
+    getQueue: {
+        method: 'GET',
+        path: 'queue',
+        responses: {
+            200: resultWithHeaders(ndType._response.queue),
+            500: resultWithHeaders(ndType._response.error),
+        },
+    },
     getSongDetail: {
         method: 'GET',
         path: 'song/:id',
@@ -140,11 +148,12 @@ export const contract = c.router({
             500: resultWithHeaders(ndType._response.error),
         },
     },
-    getTags: {
+    getTagList: {
         method: 'GET',
         path: 'tag',
+        query: ndType._parameters.tagList,
         responses: {
-            200: resultWithHeaders(ndType._response.tags),
+            200: resultWithHeaders(ndType._response.tagList),
             500: resultWithHeaders(ndType._response.error),
         },
     },
@@ -173,6 +182,15 @@ export const contract = c.router({
         query: ndType._parameters.removeFromPlaylist,
         responses: {
             200: resultWithHeaders(ndType._response.removeFromPlaylist),
+            500: resultWithHeaders(ndType._response.error),
+        },
+    },
+    saveQueue: {
+        body: ndType._parameters.saveQueue,
+        method: 'POST',
+        path: 'queue',
+        responses: {
+            200: resultWithHeaders(ndType._response.saveQueue),
             500: resultWithHeaders(ndType._response.error),
         },
     },
@@ -379,7 +397,7 @@ axiosClient.interceptors.response.use(
 );
 
 export const ndApiClient = (args: {
-    server: null | ServerListItem;
+    server: null | ServerListItemWithCredential;
     signal?: AbortSignal;
     url?: string;
 }) => {

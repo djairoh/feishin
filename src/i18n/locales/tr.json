@@ -21,7 +21,15 @@
         "goToPage": "sayfaya git",
         "moveToNext": "sonrakine geç",
         "refresh": "$t(common.refresh)",
-        "toggleSmartPlaylistEditor": "$t(entity.smartPlaylist) düzenleyiciye geç"
+        "toggleSmartPlaylistEditor": "$t(entity.smartPlaylist) düzenleyiciye geç",
+        "addOrRemoveFromSelection": "seçime ekle veya seçimi kaldır",
+        "selectRangeOfItems": "bir dizi öğe seçin",
+        "createRadioStation": "$t(entity.radioStation_one) oluştur",
+        "deleteRadioStation": "$t(entity.radioStation_one) istasyonunu sil",
+        "selectAll": "tümünü seç",
+        "downloadStarted": "{{count}} öğenin indirilmesine başlandı",
+        "moveUp": "yukarı kaydır",
+        "moveDown": "aşağı kaydır"
     },
     "common": {
         "action_one": "eylem",
@@ -118,7 +126,10 @@
         "year": "yıl",
         "yes": "evet",
         "trackGain": "parça kazancı",
-        "trackPeak": "parça zirvesi"
+        "trackPeak": "parça zirvesi",
+        "private": "gizli",
+        "clean": "temiz",
+        "countSelected": "{{count}} adet seçildi"
     },
     "entity": {
         "album_one": "albüm",
@@ -511,7 +522,6 @@
         "contextMenu_description": "bir öğeye sağ tıkladığınızda menüde gösterilen öğeleri gizlemenizi sağlar. işaretli olmayan öğeler gizlenecektir",
         "crossfadeDuration": "çapraz geçiş süresi",
         "crossfadeDuration_description": "çapraz geçiş efektinin süresini ayarlar",
-        "crossfadeStyle": "çapraz geçiş stili",
         "crossfadeStyle_description": "ses oynatıcı için kullanılacak çapraz geçiş stilini seçin",
         "customCssEnable": "özel css etkinleştir",
         "customCssEnable_description": "özel css yazmaya izin verir",
@@ -530,18 +540,14 @@
         "discordIdleStatus_description": "etkinleştirildiğinde, oynatıcı boştayken durumu günceller",
         "discordListening": "durumu dinleme olarak göster",
         "discordListening_description": "durumu çalma yerine dinleme olarak göster",
-        "discordRichPresence": "{{discord}} Rich Presence",
         "discordRichPresence_description": "{{discord}} \"Rich Presence\" oynatma durumunu etkinleştirin. Görüntü tuşları şunlardır: {{icon}}, {{playing}} ve {{paused}}",
         "discordServeImage": "sunucudan {{discord}} resimleri servis et",
         "discordServeImage_description": "sunucudan {{discord}} Rich Presence için kapak resmi paylaşın, yalnızca Jellyfin ve Navidrome için kullanılabilir",
         "discordUpdateInterval": "{{discord}} Rich Presence güncelleme aralığı",
         "discordUpdateInterval_description": "her güncelleme arasındaki saniye cinsinden süre (minimum 15 saniye)",
-        "doubleClickBehavior": "çift tıklandığında aranan tüm parçaları sıraya koyma",
         "gaplessAudio": "aralıksız ses",
         "gaplessAudio_description": "mpv için aralıksız ses ayarını belirler",
         "gaplessAudio_optionWeak": "zayıf (tavsiye edilen)",
-        "genreBehavior": "tür sayfası varsayılan davranışı",
-        "genreBehavior_description": "bir türe tıklandığında varsayılan olarak parça mı yoksa albüm listesinde mi açılacağını belirler",
         "globalMediaHotkeys": "evrensel medya kısayol tuşları",
         "globalMediaHotkeys_description": "oynatmayı kontrol etmek için sistem medya kısayol tuşlarınızın kullanımını etkinleştirin veya devre dışı bırakın",
         "homeConfiguration": "ana sayfa yapılandırma",
@@ -571,7 +577,6 @@
         "hotkey_zoomOut": "uzaklaştır",
         "imageAspectRatio": "doğal kapak resmi en boy oranını kullanın",
         "imageAspectRatio_description": "etkinleştirilirse, kapak resmi kendi doğal en boy oranı kullanılarak gösterilecektir. 1:1 olmayan resimler için kalan alan boş olacaktır",
-        "language": "dil",
         "language_description": "uygulama için dili ayarlar ($t(common.restartRequired))",
         "lastfm": "last.fm bağlantılarını göster",
         "lastfm_description": "sanatçı/albüm sayfalarında Last.fm bağlantılarını göster",
@@ -583,8 +588,6 @@
         "lyricFetchProvider_description": "şarkı sözlerinin getirileceği sağlayıcıları seçin. sağlayıcıların sırası, sorgulanacakları sıradır",
         "lyricOffset": "şarkı sözü kaydırma (ms)",
         "lyricOffset_description": "şarkı sözünü belirtilen milisaniye miktarı kadar kaydırır",
-        "notify": "şarkı bildirimlerini etkinleştir",
-        "notify_description": "geçerli şarkıyı değiştirirken bildirimleri göster",
         "minimizeToTray": "tepsiye yerleştir",
         "minimizeToTray_description": "uygulamayı sistem tepsisine küçültme",
         "minimumScrobblePercentage": "minimum \"scrobble\" (dinleme sayımı) süresi (yüzde)",
@@ -593,7 +596,6 @@
         "minimumScrobbleSeconds_description": "'scrobble' yapılmadan önce çalınması gereken şarkının saniye cinsinden minimum süresi",
         "mpvExecutablePath": "mpv çalıştırma yolu",
         "mpvExecutablePath_description": "mpv çalıştırma yolunu ayarlar. boş bırakılırsa, varsayılan yol kullanılır",
-        "mpvExtraParameters": "mpv parametreleri",
         "mpvExtraParameters_help": "her satır için tek",
         "musicbrainz": "MusicBrainz bağlantılarını göster",
         "musicbrainz_description": "MusicBrainz ID'in bulunduğu sanatçı/albüm sayfalarında MusicBrainz bağlantılarını göster",
@@ -611,8 +613,6 @@
         "playButtonBehavior_optionAddNext": "$t(player.addNext)",
         "playButtonBehavior_optionPlay": "$t(player.play)",
         "playButtonBehavior_optionPlayShuffled": "$t(player.shuffle)",
-        "playerAlbumArtResolution": "oynatıcı albüm resmi çözünürlüğü",
-        "playerAlbumArtResolution_description": "büyük oynatıcının albüm resmi önizlemesi için çözünürlük. daha büyük değerler daha net görünmesini sağlar, ancak yüklemeyi yavaşlatabilir. varsayılan değer 0, otomatik olarak çalışır",
         "playerbarOpenDrawer": "oynatma çubuğu tam ekran geçişi",
         "playerbarOpenDrawer_description": "tam ekran oynatıcıyı açmak için oynatma çubuğuna tıklamaya izin verir",
         "remotePassword": "uzaktan kontrol sunucusu şifresi",
@@ -673,15 +673,12 @@
         "windowBarStyle_description": "pencere çubuğunun stilini seçin",
         "zoom": "yakınlaştırma yüzdesi",
         "zoom_description": "uygulama için yakınlaştırma yüzdesini ayarlar",
-        "doubleClickBehavior_description": "evet ise, bir parça aramasında eşleşen tüm parçalar sıraya alınır. aksi takdirde, yalnızca tıklanan parça sıraya alınır",
         "enableRemote": "uzaktan kontrol sunucusunu etkinleştir",
         "enableRemote_description": "uzaktan kumanda sunucusunun diğer cihazların uygulamayı kontrol etmesine izin vermesini sağlar",
         "externalLinks": "harici bağlantıları göster",
         "externalLinks_description": "sanatçı/albüm sayfalarında dış bağlantıların (Last.fm, MusicBrainz) gösterilmesini sağlar",
         "exitToTray": "tepsiye çıkış",
         "exitToTray_description": "uygulamadan sistem tepsisine çıkma",
-        "floatingQueueArea": "kayan liste üzerine gelinen alanı göster",
-        "floatingQueueArea_description": "oynatma kuyruğunu görüntülemek için ekranın sağ tarafında fareyle üzerine gelinen bir simge görüntüleyin",
         "followLyric": "güncel şarkı sözlerini takip et",
         "followLyric_description": "şarkı sözünü geçerli çalma konumuna kaydırma",
         "preferLocalLyrics": "yerel sözleri tercih edin",
@@ -723,15 +720,17 @@
         "themeDark_description": "uygulama için kullanılacak koyu temayı ayarlar",
         "themeLight": "tema (açık)",
         "themeLight_description": "uygulama için kullanılacak açık temayı ayarlar",
-        "transcodeNote": "1 (web) - 2 (mpv) şarkıdan sonra etkili olur",
-        "transcode": "kod dönüştürmeyi etkinleştir",
         "discordDisplayType": "{{discord}} varlık gösterge türü",
         "discordDisplayType_description": "durumunuzda dinlediğiniz şarkı olarak değiştirir",
         "discordDisplayType_songname": "şarkı ismi",
         "discordDisplayType_artistname": "Sanatçı adı(ları)",
         "hotkey_navigateHome": "ana sayfaya git",
         "preventSleepOnPlayback": "oynatma sırasında uykuyu önle",
-        "preventSleepOnPlayback_description": "müzik çalarken ekranın uyku moduna geçmesini önle"
+        "preventSleepOnPlayback_description": "müzik çalarken ekranın uyku moduna geçmesini önle",
+        "releaseChannel_optionBeta": "beta",
+        "releaseChannel_optionLatest": "en son",
+        "language": "dil",
+        "notify": "müzik bildirimi aktivleştir"
     },
     "table": {
         "column": {
@@ -802,12 +801,21 @@
                 "year": "$t(common.year)"
             },
             "view": {
-                "card": "kart",
                 "grid": "ızgara",
                 "list": "liste",
-                "poster": "poster",
                 "table": "tablo"
             }
         }
+    },
+    "releaseType": {
+        "secondary": {
+            "demo": "demo",
+            "live": "canlı",
+            "remix": "remix"
+        }
+    },
+    "dragDropZone": {
+        "error_oneFileOnly": "lütfen sadece 1 dosya seç",
+        "error_readingFile": "bu dosyayi okurken bir sorun oluştu :{{errorMessage}}"
     }
 }

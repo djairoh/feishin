@@ -1,26 +1,29 @@
-import { ReactNode } from 'react';
-import { TFunction, useTranslation } from 'react-i18next';
-import { generatePath } from 'react-router';
-import { Link } from 'react-router-dom';
+import { TFunction } from 'i18next';
+import { ReactNode, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { generatePath, Link } from 'react-router';
 
 import { SongPath } from '/@/renderer/features/item-details/components/song-path';
-import { useGenreRoute } from '/@/renderer/hooks/use-genre-route';
 import { AppRoute } from '/@/renderer/router/routes';
 import { formatDurationString, formatSizeString } from '/@/renderer/utils';
 import { formatDateRelative, formatRating } from '/@/renderer/utils/format';
 import { replaceURLWithHTMLLinks } from '/@/renderer/utils/linkify';
+import { normalizeReleaseTypes } from '/@/renderer/utils/normalize-release-types';
 import { sanitize } from '/@/renderer/utils/sanitize';
 import { SEPARATOR_STRING } from '/@/shared/api/utils';
 import { Icon } from '/@/shared/components/icon/icon';
+import { Select } from '/@/shared/components/select/select';
 import { Separator } from '/@/shared/components/separator/separator';
 import { Spoiler } from '/@/shared/components/spoiler/spoiler';
+import { Stack } from '/@/shared/components/stack/stack';
 import { Table } from '/@/shared/components/table/table';
 import { Text } from '/@/shared/components/text/text';
-import { ExplicitStatus } from '/@/shared/types/domain-types';
 import {
     Album,
     AlbumArtist,
     AnyLibraryItem,
+    Artist,
+    ExplicitStatus,
     LibraryItem,
     Playlist,
     RelatedArtist,
@@ -28,17 +31,22 @@ import {
 } from '/@/shared/types/domain-types';
 
 export type ItemDetailsModalProps = {
-    item: Album | AlbumArtist | Playlist | Song;
+    item?: Album | AlbumArtist | Artist | Playlist | Song;
+    items?: (Album | AlbumArtist | Artist | Playlist | Song)[];
 };
 
 type ItemDetailRow<T> = {
     key?: keyof T;
     label: string;
     postprocess?: string[];
-    render?: (item: T, t: TFunction) => ReactNode;
+    render?: (item: T, t: TFunction<'translation'>) => ReactNode;
 };
 
-const handleRow = <T extends AnyLibraryItem>(t: TFunction, item: T, rule: ItemDetailRow<T>) => {
+const handleRow = <T extends AnyLibraryItem>(
+    t: TFunction<'translation'>,
+    item: T,
+    rule: ItemDetailRow<T>,
+) => {
     let value: ReactNode;
 
     if (rule.render) {
@@ -67,7 +75,7 @@ const formatArtists = (artists: null | RelatedArtist[] | undefined) =>
             {artist.id ? (
                 <Text
                     component={Link}
-                    fw={700}
+                    fw={600}
                     isLink
                     overflow="visible"
                     size="md"
@@ -90,11 +98,13 @@ const formatArtists = (artists: null | RelatedArtist[] | undefined) =>
     ));
 
 const formatComment = (item: Album | Song) =>
-    item.comment ? <Spoiler maxHeight={50}>{replaceURLWithHTMLLinks(item.comment)}</Spoiler> : null;
+    item.comment ? (
+        <Spoiler maxHeight={50}>
+            <Text>{replaceURLWithHTMLLinks(item.comment)}</Text>
+        </Spoiler>
+    ) : null;
 
 const FormatGenre = (item: Album | AlbumArtist | Playlist | Song) => {
-    const genreRoute = useGenreRoute();
-
     if (!item.genres?.length) {
         return null;
     }
@@ -104,11 +114,15 @@ const FormatGenre = (item: Album | AlbumArtist | Playlist | Song) => {
             {index > 0 && <Separator />}
             <Text
                 component={Link}
-                fw={700}
+                fw={600}
                 isLink
                 overflow="visible"
                 size="md"
-                to={genre.id ? generatePath(genreRoute, { genreId: genre.id }) : ''}
+                to={
+                    genre.id
+                        ? generatePath(AppRoute.LIBRARY_GENRES_DETAIL, { genreId: genre.id })
+                        : ''
+                }
             >
                 {genre.name || '—'}
             </Text>
@@ -122,6 +136,10 @@ const BoolField = (key: boolean) =>
 const AlbumPropertyMapping: ItemDetailRow<Album>[] = [
     { key: 'name', label: 'common.title' },
     { label: 'entity.albumArtist_one', render: (item) => formatArtists(item.albumArtists) },
+    {
+        label: 'common.releaseType',
+        render: (item, t) => normalizeReleaseTypes(item.releaseTypes, t).join(SEPARATOR_STRING),
+    },
     { label: 'entity.genre_other', render: FormatGenre },
     {
         label: 'common.duration',
@@ -174,6 +192,8 @@ const AlbumPropertyMapping: ItemDetailRow<Album>[] = [
             ) : null,
     },
     { key: 'id', label: 'filter.id' },
+    { key: 'version', label: 'common.version' },
+    { label: 'common.recordLabel', render: (item) => item.recordLabels.join(SEPARATOR_STRING) },
 ];
 
 const AlbumArtistPropertyMapping: ItemDetailRow<AlbumArtist>[] = [
@@ -212,10 +232,9 @@ const AlbumArtistPropertyMapping: ItemDetailRow<AlbumArtist>[] = [
         label: 'common.biography',
         render: (artist) =>
             artist.biography ? (
-                <Spoiler
-                    dangerouslySetInnerHTML={{ __html: sanitize(artist.biography) }}
-                    maxHeight={50}
-                />
+                <Spoiler>
+                    <Text dangerouslySetInnerHTML={{ __html: sanitize(artist.biography) }} />
+                </Spoiler>
             ) : null,
     },
     { key: 'id', label: 'filter.id' },
@@ -257,7 +276,7 @@ const SongPropertyMapping: ItemDetailRow<Song>[] = [
             song.album && (
                 <Text
                     component={Link}
-                    fw={700}
+                    fw={600}
                     isLink
                     overflow="visible"
                     size="md"
@@ -391,34 +410,81 @@ const handleParticipants = (item: Album | Song, t: TFunction) => {
     return [];
 };
 
-export const ItemDetailsModal = ({ item }: ItemDetailsModalProps) => {
+export const ItemDetailsModal = ({ item, items }: ItemDetailsModalProps) => {
     const { t } = useTranslation();
+    const allItems = useMemo(() => items || (item ? [item] : []), [item, items]);
+    const [selectedIndex, setSelectedIndex] = useState(0);
+
+    const selectedItem = useMemo(() => {
+        return allItems[selectedIndex] || null;
+    }, [allItems, selectedIndex]);
+
+    const selectData = useMemo(() => {
+        return allItems.map((it, index) => ({
+            label:
+                it.name ||
+                `${t('common.item', { defaultValue: 'Item', postProcess: 'sentenceCase' })} ${index + 1}`,
+            value: String(index),
+        }));
+    }, [allItems, t]);
+
+    if (!selectedItem) {
+        return null;
+    }
+
     let body: ReactNode[] = [];
 
-    switch (item.itemType) {
+    switch (selectedItem._itemType) {
         case LibraryItem.ALBUM:
-            body = AlbumPropertyMapping.map((rule) => handleRow(t, item, rule));
-            body.push(...handleParticipants(item, t));
-            body.push(...handleTags(item, t));
+            body = AlbumPropertyMapping.map((rule) => handleRow(t, selectedItem, rule));
+            body.push(...handleParticipants(selectedItem, t));
+            body.push(...handleTags(selectedItem, t));
             break;
         case LibraryItem.ALBUM_ARTIST:
-            body = AlbumArtistPropertyMapping.map((rule) => handleRow(t, item, rule));
+            body = AlbumArtistPropertyMapping.map((rule) => handleRow(t, selectedItem, rule));
             break;
         case LibraryItem.PLAYLIST:
-            body = PlaylistPropertyMapping.map((rule) => handleRow(t, item, rule));
+            body = PlaylistPropertyMapping.map((rule) => handleRow(t, selectedItem, rule));
             break;
         case LibraryItem.SONG:
-            body = SongPropertyMapping.map((rule) => handleRow(t, item, rule));
-            body.push(...handleParticipants(item, t));
-            body.push(...handleTags(item, t));
+            body = SongPropertyMapping.map((rule) => handleRow(t, selectedItem, rule));
+            body.push(...handleParticipants(selectedItem, t));
+            body.push(...handleTags(selectedItem, t));
             break;
         default:
             body = [];
     }
 
     return (
-        <Table highlightOnHover variant="vertical" withRowBorders={false} withTableBorder>
-            <Table.Tbody>{body}</Table.Tbody>
-        </Table>
+        <Stack gap="md">
+            {allItems.length > 1 && (
+                <Select
+                    data={selectData}
+                    onChange={(value) => {
+                        if (value) {
+                            setSelectedIndex(Number(value));
+                        }
+                    }}
+                    value={String(selectedIndex)}
+                />
+            )}
+            <Table
+                highlightOnHover={false}
+                styles={{
+                    th: {
+                        color: 'var(--theme-colors-foreground-muted)',
+                        fontWeight: 500,
+                        padding: 'var(--theme-spacing-sm)',
+                    },
+                    tr: {
+                        color: 'var(--theme-colors-foreground-muted)',
+                        padding: 'var(--theme-spacing-xl)',
+                    },
+                }}
+                withRowBorders={true}
+            >
+                <Table.Tbody>{body}</Table.Tbody>
+            </Table>
+        </Stack>
     );
 };

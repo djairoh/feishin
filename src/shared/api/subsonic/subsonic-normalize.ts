@@ -1,4 +1,3 @@
-import { nanoid } from 'nanoid';
 import { z } from 'zod';
 
 import { ssType } from '/@/shared/api/subsonic/subsonic-types';
@@ -6,36 +5,16 @@ import {
     Album,
     AlbumArtist,
     ExplicitStatus,
+    Folder,
     Genre,
+    InternetRadioStation,
     LibraryItem,
     Playlist,
-    QueueSong,
     RelatedArtist,
-    ServerListItem,
+    ServerListItemWithCredential,
     ServerType,
+    Song,
 } from '/@/shared/types/domain-types';
-
-const getCoverArtUrl = (args: {
-    baseUrl: string | undefined;
-    coverArtId?: string;
-    credential: string | undefined;
-    size: number;
-}) => {
-    const size = args.size ? args.size : 250;
-
-    if (!args.coverArtId || args.coverArtId.match('2a96cbd8b46e442fc41c2b86b821562f')) {
-        return null;
-    }
-
-    return (
-        `${args.baseUrl}/rest/getCoverArt.view` +
-        `?id=${args.coverArtId}` +
-        `&${args.credential}` +
-        '&v=1.13.0' +
-        '&c=Feishin' +
-        `&size=${size}`
-    );
-};
 
 const getArtistList = (
     artists?: typeof ssType._response.song._type.artists,
@@ -45,14 +24,20 @@ const getArtistList = (
     return artists
         ? artists.map((item) => ({
               id: item.id.toString(),
+              imageId: null,
               imageUrl: null,
               name: item.name,
+              userFavorite: false,
+              userRating: null,
           }))
         : [
               {
                   id: artistId?.toString() || '',
+                  imageId: null,
                   imageUrl: null,
                   name: artistName || '',
+                  userFavorite: false,
+                  userRating: null,
               },
           ];
 };
@@ -71,8 +56,11 @@ const getParticipants = (
         for (const contributor of item.contributors) {
             const artist = {
                 id: contributor.artist.id?.toString() || '',
+                imageId: null,
                 imageUrl: null,
                 name: contributor.artist.name || '',
+                userFavorite: false,
+                userRating: null,
             };
 
             const role = contributor.subRole
@@ -95,21 +83,32 @@ const getGenres = (
         | z.infer<typeof ssType._response.album>
         | z.infer<typeof ssType._response.albumListEntry>
         | z.infer<typeof ssType._response.song>,
+    server?: null | ServerListItemWithCredential,
 ): Genre[] => {
     return item.genres
         ? item.genres.map((genre) => ({
+              _itemType: LibraryItem.GENRE,
+              _serverId: server?.id || 'unknown',
+              _serverType: ServerType.SUBSONIC,
+              albumCount: null,
               id: genre.name,
+              imageId: null,
               imageUrl: null,
-              itemType: LibraryItem.GENRE,
               name: genre.name,
+              songCount: null,
           }))
         : item.genre
           ? [
                 {
+                    _itemType: LibraryItem.GENRE,
+                    _serverId: server?.id || 'unknown',
+                    _serverType: ServerType.SUBSONIC,
+                    albumCount: null,
                     id: item.genre,
+                    imageId: null,
                     imageUrl: null,
-                    itemType: LibraryItem.GENRE,
                     name: item.genre,
+                    songCount: null,
                 },
             ]
           : [];
@@ -117,20 +116,12 @@ const getGenres = (
 
 const normalizeSong = (
     item: z.infer<typeof ssType._response.song>,
-    server: null | ServerListItem,
-    size?: number,
-): QueueSong => {
-    const imageUrl =
-        getCoverArtUrl({
-            baseUrl: server?.url,
-            coverArtId: item.coverArt?.toString(),
-            credential: server?.credential,
-            size: size || 300,
-        }) || null;
-
-    const streamUrl = `${server?.url}/rest/stream.view?id=${item.id}&v=1.13.0&c=Feishin&${server?.credential}`;
-
+    server?: null | ServerListItemWithCredential,
+): Song => {
     return {
+        _itemType: LibraryItem.SONG,
+        _serverId: server?.id || 'unknown',
+        _serverType: ServerType.SUBSONIC,
         album: item.album || '',
         albumArtists: getArtistList(item.albumArtists, item.artistId, item.artist),
         albumId: item.albumId?.toString() || '',
@@ -160,11 +151,10 @@ const normalizeSong = (
                       track: item.replayGain.trackGain,
                   }
                 : null,
-        genres: getGenres(item),
+        genres: getGenres(item, server),
         id: item.id.toString(),
-        imagePlaceholderUrl: null,
-        imageUrl,
-        itemType: LibraryItem.SONG,
+        imageId: item.coverArt?.toString() || null,
+        imageUrl: null,
         lastPlayedAt: null,
         lyrics: null,
         mbzRecordingId: item.musicBrainzId || null,
@@ -181,76 +171,72 @@ const normalizeSong = (
                 : null,
         playCount: item?.playCount || 0,
         releaseDate: null,
-        releaseYear: item.year ? String(item.year) : null,
+        releaseYear: item.year || null,
         sampleRate: item.samplingRate || null,
-        serverId: server?.id || 'unknown',
-        serverType: ServerType.SUBSONIC,
         size: item.size,
-        streamUrl,
         tags: null,
         trackNumber: item.track || 1,
-        uniqueId: nanoid(),
         updatedAt: '',
-        userFavorite: item.starred || false,
+        userFavorite: Boolean(item.starred) || false,
         userRating: item.userRating || null,
     };
 };
 
 const normalizeAlbumArtist = (
     item:
-        | z.infer<typeof ssType._response.albumArtist>
-        | z.infer<typeof ssType._response.artistListEntry>,
-    server: null | ServerListItem,
-    imageSize?: number,
+        | (z.infer<typeof ssType._response.albumArtist> & {
+              similarArtists?: z.infer<
+                  typeof ssType._response.artistInfo
+              >['artistInfo']['similarArtist'];
+          })
+        | (z.infer<typeof ssType._response.artistListEntry> & {
+              similarArtists?: z.infer<
+                  typeof ssType._response.artistInfo
+              >['artistInfo']['similarArtist'];
+          }),
+    server?: null | ServerListItemWithCredential,
 ): AlbumArtist => {
-    const imageUrl =
-        getCoverArtUrl({
-            baseUrl: server?.url,
-            coverArtId: item.coverArt?.toString(),
-            credential: server?.credential,
-            size: imageSize || 100,
-        }) || null;
-
     return {
+        _itemType: LibraryItem.ALBUM_ARTIST,
+        _serverId: server?.id || 'unknown',
+        _serverType: ServerType.SUBSONIC,
         albumCount: item.albumCount ? Number(item.albumCount) : 0,
-        backgroundImageUrl: null,
         biography: null,
         duration: null,
         genres: [],
         id: item.id.toString(),
-        imageUrl,
-        itemType: LibraryItem.ALBUM_ARTIST,
+        imageId: item.coverArt?.toString() || null,
+        imageUrl: null,
         lastPlayedAt: null,
         mbz: null,
         name: item.name,
         playCount: null,
-        serverId: server?.id || 'unknown',
-        serverType: ServerType.SUBSONIC,
-        similarArtists: [],
+        similarArtists:
+            item.similarArtists?.map((artist) => ({
+                id: artist.id,
+                imageId: null,
+                imageUrl: null,
+                name: artist.name,
+                userFavorite: Boolean(artist.starred) || false,
+                userRating: artist.userRating || null,
+            })) || [],
         songCount: null,
-        userFavorite: false,
+        userFavorite: Boolean(item.starred) || false,
         userRating: null,
     };
 };
 
 const normalizeAlbum = (
     item: z.infer<typeof ssType._response.album> | z.infer<typeof ssType._response.albumListEntry>,
-    server: null | ServerListItem,
-    imageSize?: number,
+    server?: null | ServerListItemWithCredential,
 ): Album => {
-    const imageUrl =
-        getCoverArtUrl({
-            baseUrl: server?.url,
-            coverArtId: item.coverArt?.toString(),
-            credential: server?.credential,
-            size: imageSize || 300,
-        }) || null;
-
     return {
+        _itemType: LibraryItem.ALBUM,
+        _serverId: server?.id || 'unknown',
+        _serverType: ServerType.SUBSONIC,
         albumArtist: item.artist,
         albumArtists: getArtistList(item.artists, item.artistId, item.artist),
         artists: [],
-        backdropImageUrl: null,
         comment: null,
         createdAt: item.created,
         duration: item.duration * 1000,
@@ -260,22 +246,31 @@ const normalizeAlbum = (
                 : item.explicitStatus === 'clean'
                   ? ExplicitStatus.CLEAN
                   : null,
-        genres: getGenres(item),
+        genres: getGenres(item, server),
         id: item.id.toString(),
-        imagePlaceholderUrl: null,
-        imageUrl,
+        imageId: item.coverArt?.toString() || null,
+        imageUrl: null,
         isCompilation: null,
-        itemType: LibraryItem.ALBUM,
         lastPlayedAt: null,
         mbzId: null,
         name: item.name,
         originalDate: null,
         participants: getParticipants(item),
         playCount: null,
-        releaseDate: item.year ? new Date(Date.UTC(item.year, 0, 1)).toISOString() : null,
-        releaseYear: item.year ? Number(item.year) : null,
-        serverId: server?.id || 'unknown',
-        serverType: ServerType.SUBSONIC,
+        recordLabels: item.recordLabels?.map((item) => item.name) || [],
+        releaseDate:
+            item.releaseDate &&
+            typeof item.releaseDate.year === 'number' &&
+            typeof item.releaseDate.month === 'number' &&
+            typeof item.releaseDate.day === 'number'
+                ? new Date(
+                      item.releaseDate.year,
+                      item.releaseDate.month - 1,
+                      item.releaseDate.day,
+                  ).toISOString()
+                : null,
+        releaseTypes: item.releaseTypes || [],
+        releaseYear: item.year || null,
         size: null,
         songCount: item.songCount,
         songs:
@@ -283,10 +278,10 @@ const normalizeAlbum = (
                 normalizeSong(song, server),
             ) || [],
         tags: null,
-        uniqueId: nanoid(),
         updatedAt: item.created,
-        userFavorite: item.starred || false,
+        userFavorite: Boolean(item.starred) || false,
         userRating: item.userRating || null,
+        version: item.version || null,
     };
 };
 
@@ -294,47 +289,99 @@ const normalizePlaylist = (
     item:
         | z.infer<typeof ssType._response.playlist>
         | z.infer<typeof ssType._response.playlistListEntry>,
-    server: null | ServerListItem,
+    server?: null | ServerListItemWithCredential,
 ): Playlist => {
     return {
+        _itemType: LibraryItem.PLAYLIST,
+        _serverId: server?.id || 'unknown',
+        _serverType: ServerType.SUBSONIC,
         description: item.comment || null,
         duration: item.duration * 1000,
         genres: [],
         id: item.id.toString(),
-        imagePlaceholderUrl: null,
-        imageUrl: getCoverArtUrl({
-            baseUrl: server?.url,
-            coverArtId: item.coverArt?.toString(),
-            credential: server?.credential,
-            size: 300,
-        }),
-        itemType: LibraryItem.PLAYLIST,
+        imageId: item.coverArt?.toString() || null,
+        imageUrl: null,
         name: item.name,
         owner: item.owner,
         ownerId: item.owner,
         public: item.public,
-        serverId: server?.id || 'unknown',
-        serverType: ServerType.SUBSONIC,
         size: null,
         songCount: item.songCount,
     };
 };
 
-const normalizeGenre = (item: z.infer<typeof ssType._response.genre>): Genre => {
+const normalizeGenre = (
+    item: z.infer<typeof ssType._response.genre>,
+    server: null | ServerListItemWithCredential,
+): Genre => {
     return {
+        _itemType: LibraryItem.GENRE,
+        _serverId: server?.id || 'unknown',
+        _serverType: ServerType.SUBSONIC,
         albumCount: item.albumCount,
         id: item.value,
+        imageId: null,
         imageUrl: null,
-        itemType: LibraryItem.GENRE,
         name: item.value,
         songCount: item.songCount,
+    };
+};
+
+const normalizeFolder = (
+    item: z.infer<typeof ssType._response.directory>,
+    server?: null | ServerListItemWithCredential,
+): Folder => {
+    const results = item.child?.reduce(
+        (acc: { folders: Folder[]; songs: Song[] }, item) => {
+            const isDirectory = item.isDir === true;
+
+            if (isDirectory) {
+                const folder = normalizeFolder(item, server);
+                acc.folders.push(folder);
+            } else {
+                const song = normalizeSong(item, server);
+                acc.songs.push(song);
+            }
+
+            return acc;
+        },
+        {
+            folders: [],
+            songs: [],
+        },
+    );
+
+    return {
+        _itemType: LibraryItem.FOLDER,
+        _serverId: server?.id || 'unknown',
+        _serverType: ServerType.SUBSONIC,
+        children: {
+            folders: results?.folders || [],
+            songs: results?.songs || [],
+        },
+        id: item.id.toString(),
+        name: item.title,
+        parentId: item.parent,
+    };
+};
+
+const normalizeInternetRadioStation = (
+    item: z.infer<typeof ssType._response.internetRadioStation>,
+): InternetRadioStation => {
+    return {
+        homepageUrl: item.homepageUrl || null,
+        id: item.id,
+        name: item.name,
+        streamUrl: item.streamUrl,
     };
 };
 
 export const ssNormalize = {
     album: normalizeAlbum,
     albumArtist: normalizeAlbumArtist,
+    folder: normalizeFolder,
     genre: normalizeGenre,
+    internetRadioStation: normalizeInternetRadioStation,
     playlist: normalizePlaylist,
     song: normalizeSong,
 };

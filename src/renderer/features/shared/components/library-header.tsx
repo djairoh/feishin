@@ -1,22 +1,37 @@
 import { closeAllModals, openModal } from '@mantine/modals';
-import { AutoTextSize } from 'auto-text-size';
 import clsx from 'clsx';
 import { forwardRef, ReactNode, Ref, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 
 import styles from './library-header.module.css';
 
-import { useGeneralSettings } from '/@/renderer/store';
+import { useIsPlayerFetching } from '/@/renderer/features/player/context/player-context';
+import {
+    PlayLastTextButton,
+    PlayNextTextButton,
+    PlayTextButton,
+} from '/@/renderer/features/shared/components/play-button';
+import { LONG_PRESS_PLAY_BEHAVIOR } from '/@/renderer/features/shared/components/play-button-group';
+import { usePlayButtonClick } from '/@/renderer/features/shared/hooks/use-play-button-click';
+import { useIsMutatingCreateFavorite } from '/@/renderer/features/shared/mutations/create-favorite-mutation';
+import { useIsMutatingDeleteFavorite } from '/@/renderer/features/shared/mutations/delete-favorite-mutation';
+import { useIsMutatingRating } from '/@/renderer/features/shared/mutations/set-rating-mutation';
+import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
+import { Button } from '/@/shared/components/button/button';
 import { Center } from '/@/shared/components/center/center';
+import { Group } from '/@/shared/components/group/group';
+import { Icon } from '/@/shared/components/icon/icon';
 import { Image } from '/@/shared/components/image/image';
+import { Rating } from '/@/shared/components/rating/rating';
+import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Text } from '/@/shared/components/text/text';
 import { LibraryItem } from '/@/shared/types/domain-types';
+import { Play } from '/@/shared/types/types';
 
 interface LibraryHeaderProps {
-    background?: string;
-    blur?: number;
     children?: ReactNode;
+    containerClassName?: string;
     imagePlaceholderUrl?: null | string;
     imageUrl?: null | string;
     item: { route: string; type: LibraryItem };
@@ -26,12 +41,11 @@ interface LibraryHeaderProps {
 
 export const LibraryHeader = forwardRef(
     (
-        { background, blur, children, imageUrl, item, title }: LibraryHeaderProps,
+        { children, containerClassName, imageUrl, item, title }: LibraryHeaderProps,
         ref: Ref<HTMLDivElement>,
     ) => {
         const { t } = useTranslation();
         const [isImageError, setIsImageError] = useState<boolean | null>(false);
-        const { albumBackground } = useGeneralSettings();
 
         const onImageError = () => {
             setIsImageError(true);
@@ -84,16 +98,7 @@ export const LibraryHeader = forwardRef(
         }, [imageUrl, isImageError]);
 
         return (
-            <div className={styles.libraryHeader} ref={ref}>
-                <div
-                    className={styles.background}
-                    style={{ background, filter: `blur(${blur ?? 0}rem)` }}
-                />
-                <div
-                    className={clsx(styles.backgroundOverlay, {
-                        [styles.opaqueOverlay]: albumBackground,
-                    })}
-                />
+            <div className={clsx(styles.libraryHeader, containerClassName)} ref={ref}>
                 <div
                     className={styles.imageSection}
                     onClick={() => openImage()}
@@ -108,6 +113,8 @@ export const LibraryHeader = forwardRef(
                         <Image
                             alt="cover"
                             className={styles.image}
+                            containerClassName={styles.image}
+                            key={imageUrl}
                             loading="eager"
                             onError={onImageError}
                             src={imageUrl || ''}
@@ -117,19 +124,24 @@ export const LibraryHeader = forwardRef(
                 {title && (
                     <div className={styles.metadataSection}>
                         <Text
+                            className={styles.itemType}
                             component={Link}
                             fw={600}
                             isLink
                             size="md"
+                            style={{}}
                             to={item.route}
                             tt="uppercase"
                         >
                             {itemTypeString()}
                         </Text>
-                        <h1 className={styles.title}>
-                            <AutoTextSize maxFontSizePx={80} mode="box">
-                                {title}
-                            </AutoTextSize>
+                        <h1
+                            className={styles.title}
+                            style={{
+                                fontSize: calculateTitleSize(title),
+                            }}
+                        >
+                            {title}
                         </h1>
                         {children}
                     </div>
@@ -138,3 +150,145 @@ export const LibraryHeader = forwardRef(
         );
     },
 );
+
+const calculateTitleSize = (title: string) => {
+    const titleLength = title.length;
+    let baseSize = '3dvw';
+
+    if (titleLength > 20) {
+        baseSize = '2.5dvw';
+    }
+
+    if (titleLength > 30) {
+        baseSize = '2.25dvw';
+    }
+
+    if (titleLength > 40) {
+        baseSize = '2dvw';
+    }
+
+    if (titleLength > 50) {
+        baseSize = '1.875dvw';
+    }
+
+    if (titleLength > 60) {
+        baseSize = '1.75dvw';
+    }
+
+    return `clamp(1.75rem, ${baseSize}, 2.75rem)`;
+};
+
+interface LibraryHeaderMenuProps {
+    favorite?: boolean;
+    onArtistRadio?: () => void;
+    onFavorite?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+    onMore?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+    onPlay?: (type: Play) => void;
+    onRating?: (rating: number) => void;
+    onShuffle?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+    rating?: number;
+}
+
+export const LibraryHeaderMenu = ({
+    favorite,
+    onArtistRadio,
+    onFavorite,
+    onMore,
+    onPlay,
+    onRating,
+    rating,
+}: LibraryHeaderMenuProps) => {
+    const { t } = useTranslation();
+    const isMutatingRating = useIsMutatingRating();
+    const isMutatingCreateFavorite = useIsMutatingCreateFavorite();
+    const isMutatingDeleteFavorite = useIsMutatingDeleteFavorite();
+    const isMutatingFavorite = isMutatingCreateFavorite || isMutatingDeleteFavorite;
+    const isPlayerFetching = useIsPlayerFetching();
+
+    const handlePlayNow = usePlayButtonClick({
+        onClick: () => {
+            onPlay?.(Play.NOW);
+        },
+        onLongPress: () => {
+            onPlay?.(LONG_PRESS_PLAY_BEHAVIOR[Play.NOW]);
+        },
+    });
+
+    const handlePlayNext = usePlayButtonClick({
+        onClick: () => {
+            onPlay?.(Play.NEXT);
+        },
+        onLongPress: () => {
+            onPlay?.(LONG_PRESS_PLAY_BEHAVIOR[Play.NEXT]);
+        },
+    });
+
+    const handlePlayLast = usePlayButtonClick({
+        onClick: () => {
+            onPlay?.(Play.LAST);
+        },
+        onLongPress: () => {
+            onPlay?.(LONG_PRESS_PLAY_BEHAVIOR[Play.LAST]);
+        },
+    });
+
+    return (
+        <div className={styles.libraryHeaderMenu}>
+            <Group wrap="nowrap">
+                {onPlay && <PlayTextButton {...handlePlayNow.handlers} {...handlePlayNow.props} />}
+                {onPlay && (
+                    <PlayNextTextButton {...handlePlayNext.handlers} {...handlePlayNext.props} />
+                )}
+                {onPlay && (
+                    <PlayLastTextButton {...handlePlayLast.handlers} {...handlePlayLast.props} />
+                )}
+                {onArtistRadio && (
+                    <Button
+                        leftSection={
+                            isPlayerFetching ? (
+                                <Spinner color="white" />
+                            ) : (
+                                <Icon icon="radio" size="lg" />
+                            )
+                        }
+                        onClick={onArtistRadio}
+                        size="md"
+                        variant="transparent"
+                    >
+                        {t('player.artistRadio', { postProcess: 'sentenceCase' })}
+                    </Button>
+                )}
+            </Group>
+            <Group gap="sm" wrap="nowrap">
+                {onRating && (
+                    <Rating
+                        onChange={onRating}
+                        readOnly={isMutatingRating}
+                        size="lg"
+                        value={rating || 0}
+                    />
+                )}
+                {onFavorite && (
+                    <ActionIcon
+                        disabled={isMutatingFavorite}
+                        icon="favorite"
+                        iconProps={{
+                            fill: favorite ? 'primary' : undefined,
+                        }}
+                        onClick={onFavorite}
+                        size="lg"
+                        variant="transparent"
+                    />
+                )}
+                {onMore && (
+                    <ActionIcon
+                        icon="ellipsisHorizontal"
+                        onClick={onMore}
+                        size="lg"
+                        variant="transparent"
+                    />
+                )}
+            </Group>
+        </div>
+    );
+};

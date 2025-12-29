@@ -1,69 +1,110 @@
-import type { AgGridReact as AgGridReactType } from '@ag-grid-community/react/lib/agGridReact';
-
-import { MutableRefObject } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router';
+import { useLocation, useParams } from 'react-router';
 
+import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { PageHeader } from '/@/renderer/components/page-header/page-header';
+import { useListContext } from '/@/renderer/context/list-context';
+import { usePlayer } from '/@/renderer/features/player/context/player-context';
+import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { PlaylistDetailSongListHeaderFilters } from '/@/renderer/features/playlists/components/playlist-detail-song-list-header-filters';
-import { usePlaylistDetail } from '/@/renderer/features/playlists/queries/playlist-detail-query';
-import { FilterBar, LibraryHeaderBar } from '/@/renderer/features/shared';
+import { FilterBar } from '/@/renderer/features/shared/components/filter-bar';
+import {
+    LibraryHeader,
+    LibraryHeaderMenu,
+} from '/@/renderer/features/shared/components/library-header';
+import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library-header-bar';
+import { ListSearchInput } from '/@/renderer/features/shared/components/list-search-input';
+import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer } from '/@/renderer/store';
-import { usePlayButtonBehavior } from '/@/renderer/store/settings.store';
 import { formatDurationString } from '/@/renderer/utils';
-import { Badge } from '/@/shared/components/badge/badge';
-import { SpinnerIcon } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
+import { useLocalStorage } from '/@/shared/hooks/use-local-storage';
+import { LibraryItem, Song } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
 
-interface PlaylistDetailHeaderProps {
-    handlePlay: (playType: Play) => void;
-
-    handleToggleShowQueryBuilder: () => void;
-    itemCount?: number;
-    tableRef: MutableRefObject<AgGridReactType | null>;
+interface PlaylistDetailSongListHeaderProps {
+    isSmartPlaylist?: boolean;
+    onConvertToSmart?: () => void;
+    onDelete?: () => void;
+    onToggleQueryBuilder?: () => void;
 }
 
 export const PlaylistDetailSongListHeader = ({
-    handlePlay,
-    handleToggleShowQueryBuilder,
-    itemCount,
-    tableRef,
-}: PlaylistDetailHeaderProps) => {
+    isSmartPlaylist,
+}: PlaylistDetailSongListHeaderProps) => {
     const { t } = useTranslation();
     const { playlistId } = useParams() as { playlistId: string };
+    const { itemCount, listData } = useListContext();
     const server = useCurrentServer();
-    const detailQuery = usePlaylistDetail({ query: { id: playlistId }, serverId: server?.id });
+    const location = useLocation();
 
-    const playButtonBehavior = usePlayButtonBehavior();
+    const detailQuery = useQuery({
+        ...playlistsQueries.detail({ query: { id: playlistId }, serverId: server?.id }),
+        initialData: location.state?.item,
+    });
 
-    if (detailQuery.isLoading) return null;
-    const isSmartPlaylist = detailQuery?.data?.rules;
     const playlistDuration = detailQuery?.data?.duration;
+
+    const [collapsed] = useLocalStorage<boolean>({
+        defaultValue: false,
+        key: 'playlist-header-collapsed',
+    });
+
+    const player = usePlayer();
+
+    const handlePlay = (type?: Play) => {
+        player.addToQueueByData(listData as Song[], type || Play.NOW);
+    };
+
+    const imageUrl = useItemImageUrl({
+        id: detailQuery?.data?.imageId || undefined,
+        itemType: LibraryItem.PLAYLIST,
+        type: 'header',
+    });
 
     return (
         <Stack gap={0}>
-            <PageHeader>
-                <LibraryHeaderBar>
-                    <LibraryHeaderBar.PlayButton onClick={() => handlePlay(playButtonBehavior)} />
-                    <LibraryHeaderBar.Title>{detailQuery?.data?.name}</LibraryHeaderBar.Title>
-                    {!!playlistDuration && <Badge>{formatDurationString(playlistDuration)}</Badge>}
-                    <Badge>
-                        {itemCount === null || itemCount === undefined ? (
-                            <SpinnerIcon />
-                        ) : (
-                            itemCount
+            {collapsed ? (
+                <PageHeader>
+                    <LibraryHeaderBar ignoreMaxWidth>
+                        <LibraryHeaderBar.PlayButton
+                            itemType={LibraryItem.PLAYLIST}
+                            songs={listData as Song[]}
+                        />
+                        <LibraryHeaderBar.Title>{detailQuery?.data?.name}</LibraryHeaderBar.Title>
+                        {isSmartPlaylist && (
+                            <LibraryHeaderBar.Badge>
+                                {t('entity.smartPlaylist')}
+                            </LibraryHeaderBar.Badge>
                         )}
-                    </Badge>
-                    {isSmartPlaylist && <Badge size="lg">{t('entity.smartPlaylist')}</Badge>}
-                </LibraryHeaderBar>
-            </PageHeader>
+                        {!!playlistDuration && (
+                            <LibraryHeaderBar.Badge>
+                                {formatDurationString(playlistDuration)}
+                            </LibraryHeaderBar.Badge>
+                        )}
+                        <LibraryHeaderBar.Badge
+                            isLoading={itemCount === null || itemCount === undefined}
+                        >
+                            {itemCount}
+                        </LibraryHeaderBar.Badge>
+                    </LibraryHeaderBar>
+                    <ListSearchInput />
+                </PageHeader>
+            ) : (
+                <LibraryHeader
+                    imageUrl={imageUrl}
+                    item={{ route: AppRoute.PLAYLISTS, type: LibraryItem.PLAYLIST }}
+                    title={detailQuery?.data?.name}
+                >
+                    <LibraryHeaderMenu
+                        onPlay={(type) => handlePlay(type)}
+                        onShuffle={() => handlePlay(Play.SHUFFLE)}
+                    />
+                </LibraryHeader>
+            )}
             <FilterBar>
-                <PlaylistDetailSongListHeaderFilters
-                    handlePlay={handlePlay}
-                    handleToggleShowQueryBuilder={handleToggleShowQueryBuilder}
-                    tableRef={tableRef}
-                />
+                <PlaylistDetailSongListHeaderFilters isSmartPlaylist={isSmartPlaylist} />
             </FilterBar>
         </Stack>
     );

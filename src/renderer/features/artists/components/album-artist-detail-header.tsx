@@ -1,115 +1,171 @@
-import { forwardRef, Fragment, Ref } from 'react';
+import { useSuspenseQuery } from '@tanstack/react-query';
+import { forwardRef, Fragment, Ref, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
-import { useAlbumArtistDetail } from '/@/renderer/features/artists/queries/album-artist-detail-query';
-import { LibraryHeader, useSetRating } from '/@/renderer/features/shared';
+import styles from './album-artist-detail-header.module.css';
+
+import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { artistsQueries } from '/@/renderer/features/artists/api/artists-api';
+import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
+import { usePlayer } from '/@/renderer/features/player/context/player-context';
+import {
+    LibraryHeader,
+    LibraryHeaderMenu,
+} from '/@/renderer/features/shared/components/library-header';
 import { AppRoute } from '/@/renderer/router/routes';
-import { useCurrentServer } from '/@/renderer/store';
+import { useCurrentServer, useGeneralSettings } from '/@/renderer/store';
+import { usePlayButtonBehavior } from '/@/renderer/store/settings.store';
 import { formatDurationString } from '/@/renderer/utils';
 import { Group } from '/@/shared/components/group/group';
-import { Rating } from '/@/shared/components/rating/rating';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 import { LibraryItem, ServerType } from '/@/shared/types/domain-types';
+import { Play } from '/@/shared/types/types';
 
-interface AlbumArtistDetailHeaderProps {
-    background: {
-        background?: string;
-        blur: number;
-        loading: boolean;
+export const AlbumArtistDetailHeader = forwardRef((_props, ref: Ref<HTMLDivElement>) => {
+    const { albumArtistId, artistId } = useParams() as {
+        albumArtistId?: string;
+        artistId?: string;
     };
-}
-
-export const AlbumArtistDetailHeader = forwardRef(
-    ({ background }: AlbumArtistDetailHeaderProps, ref: Ref<HTMLDivElement>) => {
-        const { albumArtistId, artistId } = useParams() as {
-            albumArtistId?: string;
-            artistId?: string;
-        };
-        const routeId = (artistId || albumArtistId) as string;
-        const server = useCurrentServer();
-        const { t } = useTranslation();
-        const detailQuery = useAlbumArtistDetail({
+    const routeId = (artistId || albumArtistId) as string;
+    const server = useCurrentServer();
+    const { showRatings } = useGeneralSettings();
+    const { t } = useTranslation();
+    const detailQuery = useSuspenseQuery(
+        artistsQueries.albumArtistDetail({
             query: { id: routeId },
             serverId: server?.id,
-        });
+        }),
+    );
 
-        const albumCount = detailQuery?.data?.albumCount;
-        const songCount = detailQuery?.data?.songCount;
-        const duration = detailQuery?.data?.duration;
-        const durationEnabled = duration !== null && duration !== undefined;
+    const albumCount = detailQuery.data?.albumCount;
+    const songCount = detailQuery.data?.songCount;
+    const duration = detailQuery.data?.duration;
+    const durationEnabled = duration !== null && duration !== undefined;
 
-        const metadataItems = [
-            {
-                enabled: albumCount !== null && albumCount !== undefined,
-                id: 'albumCount',
-                secondary: false,
-                value: t('entity.albumWithCount', { count: albumCount || 0 }),
-            },
-            {
-                enabled: songCount !== null && songCount !== undefined,
-                id: 'songCount',
-                secondary: false,
-                value: t('entity.trackWithCount', { count: songCount || 0 }),
-            },
-            {
-                enabled: durationEnabled,
-                id: 'duration',
-                secondary: true,
-                value: durationEnabled && formatDurationString(duration),
-            },
-        ];
+    const metadataItems = [
+        {
+            enabled: albumCount !== null && albumCount !== undefined,
+            id: 'albumCount',
+            secondary: false,
+            value: t('entity.albumWithCount', { count: albumCount || 0 }),
+        },
+        {
+            enabled: songCount !== null && songCount !== undefined,
+            id: 'songCount',
+            secondary: false,
+            value: t('entity.trackWithCount', { count: songCount || 0 }),
+        },
+        {
+            enabled: durationEnabled,
+            id: 'duration',
+            secondary: true,
+            value: durationEnabled && formatDurationString(duration),
+        },
+    ];
 
-        const updateRatingMutation = useSetRating({});
+    const { addToQueueByFetch, setFavorite, setRating } = usePlayer();
+    const playButtonBehavior = usePlayButtonBehavior();
 
-        const handleUpdateRating = (rating: number) => {
-            if (!detailQuery?.data) return;
+    const handlePlay = useCallback(
+        (type?: Play) => {
+            if (!server?.id || !routeId) return;
+            addToQueueByFetch(
+                server.id,
+                [routeId],
+                LibraryItem.ALBUM_ARTIST,
+                type || playButtonBehavior,
+            );
+        },
+        [addToQueueByFetch, playButtonBehavior, routeId, server.id],
+    );
 
-            updateRatingMutation.mutate({
-                query: {
-                    item: [detailQuery.data],
-                    rating,
-                },
-                serverId: detailQuery?.data.serverId,
-            });
-        };
-
-        const showRating = detailQuery?.data?.serverType === ServerType.NAVIDROME;
-
-        return (
-            <LibraryHeader
-                imageUrl={detailQuery?.data?.imageUrl}
-                item={{ route: AppRoute.LIBRARY_ALBUM_ARTISTS, type: LibraryItem.ALBUM_ARTIST }}
-                ref={ref}
-                title={detailQuery?.data?.name || ''}
-                {...background}
-            >
-                <Stack>
-                    <Group>
-                        {metadataItems
-                            .filter((i) => i.enabled)
-                            .map((item, index) => (
-                                <Fragment key={`item-${item.id}-${index}`}>
-                                    {index > 0 && <Text isNoSelect>•</Text>}
-                                    <Text isMuted={item.secondary}>{item.value}</Text>
-                                </Fragment>
-                            ))}
-                        {showRating && (
-                            <>
-                                <Text isNoSelect>•</Text>
-                                <Rating
-                                    onChange={handleUpdateRating}
-                                    readOnly={
-                                        detailQuery?.isFetching || updateRatingMutation.isLoading
-                                    }
-                                    value={detailQuery?.data?.userRating || 0}
-                                />
-                            </>
-                        )}
-                    </Group>
-                </Stack>
-            </LibraryHeader>
+    const handleFavorite = useCallback(() => {
+        if (!detailQuery.data) return;
+        setFavorite(
+            detailQuery.data._serverId,
+            [detailQuery.data.id],
+            LibraryItem.ALBUM_ARTIST,
+            !detailQuery.data.userFavorite,
         );
-    },
-);
+    }, [detailQuery.data, setFavorite]);
+
+    const handleUpdateRating = useCallback(
+        (rating: number) => {
+            if (!detailQuery.data) return;
+
+            if (detailQuery.data.userRating === rating) {
+                return setRating(
+                    detailQuery.data._serverId,
+                    [detailQuery.data.id],
+                    LibraryItem.ALBUM_ARTIST,
+                    0,
+                );
+            }
+
+            return setRating(
+                detailQuery.data._serverId,
+                [detailQuery.data.id],
+                LibraryItem.ALBUM_ARTIST,
+                rating,
+            );
+        },
+        [detailQuery.data, setRating],
+    );
+
+    const handleMoreOptions = useCallback(
+        (e: React.MouseEvent<HTMLButtonElement>) => {
+            if (!detailQuery.data) return;
+            ContextMenuController.call({
+                cmd: { items: [detailQuery.data], type: LibraryItem.ALBUM_ARTIST },
+                event: e,
+            });
+        },
+        [detailQuery.data],
+    );
+
+    const imageUrl = useItemImageUrl({
+        id: detailQuery.data?.imageId || undefined,
+        imageUrl: detailQuery.data?.imageUrl,
+        itemType: LibraryItem.ALBUM_ARTIST,
+        type: 'itemCard',
+    });
+
+    const showRating = showRatings && detailQuery?.data?._serverType === ServerType.NAVIDROME;
+
+    const selectedImageUrl = useMemo(() => {
+        return detailQuery.data?.imageUrl || imageUrl;
+    }, [detailQuery.data?.imageUrl, imageUrl]);
+
+    return (
+        <LibraryHeader
+            imageUrl={selectedImageUrl}
+            item={{ route: AppRoute.LIBRARY_ALBUM_ARTISTS, type: LibraryItem.ALBUM_ARTIST }}
+            ref={ref}
+            title={detailQuery.data?.name || ''}
+        >
+            <Stack gap="md" w="100%">
+                <Group className={styles.metadataGroup}>
+                    {metadataItems
+                        .filter((i) => i.enabled)
+                        .map((item, index) => (
+                            <Fragment key={`item-${item.id}-${index}`}>
+                                {index > 0 && <Text isNoSelect>•</Text>}
+                                <Text isMuted={item.secondary}>{item.value}</Text>
+                            </Fragment>
+                        ))}
+                </Group>
+                <LibraryHeaderMenu
+                    favorite={detailQuery.data?.userFavorite}
+                    onFavorite={handleFavorite}
+                    onMore={handleMoreOptions}
+                    onPlay={(type) => handlePlay(type)}
+                    onRating={showRating ? handleUpdateRating : undefined}
+                    onShuffle={() => handlePlay(Play.SHUFFLE)}
+                    rating={detailQuery.data?.userRating || 0}
+                />
+            </Stack>
+        </LibraryHeader>
+    );
+});

@@ -9,6 +9,12 @@
     }
 }
 
+.root {
+    padding-right: var(--theme-spacing-md);
+    padding-left: var(--theme-spacing-md);
+    cursor: default;
+}
+
 .inner {
     display: flex;
     justify-content: flex-start;
@@ -20,6 +26,7 @@
     align-content: center;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-weight: 500;
     white-space: nowrap;
 }
 
@@ -34,6 +41,10 @@
     &:focus-visible {
         border: 1px solid var(--theme-colors-primary-filled);
     }
+}
+
+.link.active {
+    color: var(--theme-colors-primary-filled);
 }
 
 .link.disabled {

@@ -1,126 +1,597 @@
-import type { ContextMenuItemType } from '/@/renderer/features/context-menu';
-
-import { ColDef } from '@ag-grid-community/core';
 import isElectron from 'is-electron';
 import { generatePath } from 'react-router';
+import { z } from 'zod';
 import { devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { shallow } from 'zustand/shallow';
 import { createWithEqualityFn } from 'zustand/traditional';
 
 import i18n from '/@/i18n/i18n';
+import {
+    ALBUM_ARTIST_TABLE_COLUMNS,
+    ALBUM_TABLE_COLUMNS,
+    GENRE_TABLE_COLUMNS,
+    pickGridRows,
+    pickTableColumns,
+    PLAYLIST_SONG_TABLE_COLUMNS,
+    PLAYLIST_TABLE_COLUMNS,
+    SONG_TABLE_COLUMNS,
+} from '/@/renderer/components/item-list/item-table-list/default-columns';
 import { AppRoute } from '/@/renderer/router/routes';
-import { usePlayerStore } from '/@/renderer/store/player.store';
 import { mergeOverridingColumns } from '/@/renderer/store/utils';
+import { FontValueSchema } from '/@/renderer/types/fonts';
 import { randomString } from '/@/renderer/utils';
+import { sanitizeCss } from '/@/renderer/utils/sanitize';
 import { AppTheme } from '/@/shared/themes/app-theme-types';
 import { LibraryItem, LyricSource } from '/@/shared/types/domain-types';
 import {
-    CrossfadeStyle,
     FontType,
+    ItemListKey,
+    ListDisplayType,
+    ListPaginationType,
     Platform,
     Play,
-    PlaybackStyle,
-    PlaybackType,
+    PlayerType,
     TableColumn,
-    TableType,
 } from '/@/shared/types/types';
 
-export type SidebarItemType = {
-    disabled: boolean;
-    id: string;
-    label: string;
-    route: AppRoute | string;
+const utils = isElectron() ? window.api.utils : null;
+
+type DeepPartial<T> = {
+    [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
 };
 
-export const sidebarItems: SidebarItemType[] = [
-    {
-        disabled: true,
-        id: 'Now Playing',
-        label: i18n.t('page.sidebar.nowPlaying'),
-        route: AppRoute.NOW_PLAYING,
-    },
-    {
-        disabled: true,
-        id: 'Search',
-        label: i18n.t('page.sidebar.search'),
-        route: generatePath(AppRoute.SEARCH, { itemType: LibraryItem.SONG }),
-    },
-    { disabled: false, id: 'Home', label: i18n.t('page.sidebar.home'), route: AppRoute.HOME },
-    {
-        disabled: false,
-        id: 'Albums',
-        label: i18n.t('page.sidebar.albums'),
-        route: AppRoute.LIBRARY_ALBUMS,
-    },
-    {
-        disabled: false,
-        id: 'Tracks',
-        label: i18n.t('page.sidebar.tracks'),
-        route: AppRoute.LIBRARY_SONGS,
-    },
-    {
-        disabled: false,
-        id: 'Artists',
-        label: i18n.t('page.sidebar.albumArtists'),
-        route: AppRoute.LIBRARY_ALBUM_ARTISTS,
-    },
-    {
-        disabled: false,
-        id: 'Artists-all',
-        label: i18n.t('page.sidebar.artists'),
-        route: AppRoute.LIBRARY_ARTISTS,
-    },
-    {
-        disabled: false,
-        id: 'Genres',
-        label: i18n.t('page.sidebar.genres'),
-        route: AppRoute.LIBRARY_GENRES,
-    },
-    {
-        disabled: true,
-        id: 'Playlists',
-        label: i18n.t('page.sidebar.playlists'),
-        route: AppRoute.PLAYLISTS,
-    },
-    {
-        disabled: true,
-        id: 'Settings',
-        label: i18n.t('page.sidebar.settings'),
-        route: AppRoute.SETTINGS,
-    },
-];
+const HomeItemSchema = z.enum([
+    'genres',
+    'mostPlayed',
+    'random',
+    'recentlyAdded',
+    'recentlyPlayed',
+    'recentlyReleased',
+]);
 
-export enum HomeItem {
-    MOST_PLAYED = 'mostPlayed',
-    RANDOM = 'random',
-    RECENTLY_ADDED = 'recentlyAdded',
-    RECENTLY_PLAYED = 'recentlyPlayed',
-    RECENTLY_RELEASED = 'recentlyReleased',
-}
+const ArtistItemSchema = z.enum([
+    'biography',
+    'compilations',
+    'recentAlbums',
+    'similarArtists',
+    'topSongs',
+]);
 
-export type SortableItem<T> = {
-    disabled: boolean;
-    id: T;
-};
+const BindingActionsSchema = z.enum([
+    'browserBack',
+    'browserForward',
+    'favoriteCurrentAdd',
+    'favoriteCurrentRemove',
+    'favoriteCurrentToggle',
+    'favoritePreviousAdd',
+    'favoritePreviousRemove',
+    'favoritePreviousToggle',
+    'globalSearch',
+    'localSearch',
+    'volumeMute',
+    'navigateHome',
+    'next',
+    'pause',
+    'play',
+    'playPause',
+    'previous',
+    'rate0',
+    'rate1',
+    'rate2',
+    'rate3',
+    'rate4',
+    'rate5',
+    'toggleShuffle',
+    'skipBackward',
+    'skipForward',
+    'stop',
+    'toggleFullscreenPlayer',
+    'toggleQueue',
+    'toggleRepeat',
+    'volumeDown',
+    'volumeUp',
+    'zoomIn',
+    'zoomOut',
+]);
 
-const homeItems = Object.values(HomeItem).map((item) => ({
-    disabled: false,
-    id: item,
-}));
+const DiscordDisplayTypeSchema = z.enum(['artist', 'feishin', 'song']);
+
+const DiscordLinkTypeSchema = z.enum(['last_fm', 'musicbrainz', 'musicbrainz_last_fm', 'none']);
+
+const GenreTargetSchema = z.enum(['album', 'track']);
+
+const SideQueueTypeSchema = z.enum(['sideDrawerQueue', 'sideQueue']);
+
+const SidebarPanelTypeSchema = z.enum(['queue', 'lyrics', 'visualizer']);
+
+const SidebarItemTypeSchema = z.object({
+    disabled: z.boolean(),
+    id: z.string(),
+    label: z.string(),
+    route: z.union([z.nativeEnum(AppRoute), z.string()]),
+});
+
+const SortableItemSchema = <T extends z.ZodTypeAny>(itemSchema: T) =>
+    z.object({
+        disabled: z.boolean(),
+        id: itemSchema,
+    });
+
+const ItemTableListColumnConfigSchema = z.object({
+    align: z.enum(['center', 'end', 'start']),
+    autoSize: z.boolean().optional(),
+    id: z.nativeEnum(TableColumn),
+    isEnabled: z.boolean(),
+    pinned: z.union([z.literal('left'), z.literal('right'), z.literal(null)]),
+    width: z.number(),
+});
+
+export type ItemTableListColumnConfig = z.infer<typeof ItemTableListColumnConfigSchema>;
+
+const ItemGridListRowConfigSchema = z.object({
+    align: z.enum(['center', 'end', 'start']),
+    id: z.nativeEnum(TableColumn),
+    isEnabled: z.boolean(),
+});
+
+export type ItemGridListRowConfig = z.infer<typeof ItemGridListRowConfigSchema>;
+
+const ItemTableListPropsSchema = z.object({
+    autoFitColumns: z.boolean(),
+    columns: z.array(ItemTableListColumnConfigSchema),
+    enableAlternateRowColors: z.boolean(),
+    enableHorizontalBorders: z.boolean(),
+    enableRowHoverHighlight: z.boolean(),
+    enableVerticalBorders: z.boolean(),
+    size: z.enum(['compact', 'default']),
+});
+
+const ItemListConfigSchema = z.object({
+    display: z.nativeEnum(ListDisplayType),
+    grid: z.object({
+        itemGap: z.enum(['lg', 'md', 'sm', 'xl', 'xs']),
+        itemsPerRow: z.number(),
+        itemsPerRowEnabled: z.boolean(),
+        rows: z.array(ItemGridListRowConfigSchema),
+        size: z.enum(['compact', 'default', 'large']),
+    }),
+    itemsPerPage: z.number(),
+    pagination: z.nativeEnum(ListPaginationType),
+    table: ItemTableListPropsSchema,
+});
+
+const TranscodingConfigSchema = z.object({
+    bitrate: z.number().optional(),
+    enabled: z.boolean(),
+    format: z.string().optional(),
+});
+
+const MpvSettingsSchema = z.object({
+    audioExclusiveMode: z.enum(['no', 'yes']),
+    audioFormat: z.enum(['float', 's16', 's32']).optional(),
+    audioSampleRateHz: z.number().optional(),
+    gaplessAudio: z.enum(['no', 'weak', 'yes']),
+    replayGainClip: z.boolean(),
+    replayGainFallbackDB: z.number().optional(),
+    replayGainMode: z.enum(['album', 'no', 'track']),
+    replayGainPreampDB: z.number().optional(),
+});
+
+const CssSettingsSchema = z.object({
+    content: z.string().transform((val) => sanitizeCss(`<style>${val}`)),
+    enabled: z.boolean(),
+});
+
+const DiscordSettingsSchema = z.object({
+    clientId: z.string(),
+    displayType: DiscordDisplayTypeSchema,
+    enabled: z.boolean(),
+    linkType: DiscordLinkTypeSchema,
+    showAsListening: z.boolean(),
+    showPaused: z.boolean(),
+    showServerImage: z.boolean(),
+});
+
+const FontSettingsSchema = z.object({
+    builtIn: FontValueSchema,
+    custom: z.string().nullable(),
+    system: z.string().nullable(),
+    type: z.nativeEnum(FontType),
+});
+
+const SkipButtonsSchema = z.object({
+    enabled: z.boolean(),
+    skipBackwardSeconds: z.number(),
+    skipForwardSeconds: z.number(),
+});
+
+const PlayerbarSliderTypeSchema = z.enum(['slider', 'waveform']);
+
+const BarAlignSchema = z.enum(['top', 'bottom', 'center']);
+
+const PlayerbarSliderSchema = z.object({
+    barAlign: BarAlignSchema,
+    barGap: z.number(),
+    barRadius: z.number(),
+    barWidth: z.number(),
+    type: PlayerbarSliderTypeSchema,
+});
+
+const AudioMotionAnalyzerSettingsSchema = z.object({
+    alphaBars: z
+        .boolean()
+        .describe(
+            'When set to true each bar’s amplitude affects its opacity, i.e., higher bars are rendered more opaque while shorter bars are more transparent. This is similar to the lumiBars effect, but bars’ amplitudes are preserved and it also works on Discrete mode and radial spectrum.',
+        ),
+    ansiBands: z
+        .boolean()
+        .describe(
+            'When set to true, ANSI/IEC preferred frequencies are used to generate the bands for octave bands modes (see mode). The preferred base-10 scale is used to compute the center and bandedge frequencies, as specified in the ANSI S1.11-2004 standard. When false, bands are based on the equal-tempered scale, so that in 1/12 octave bands the center of each band is perfectly tuned to a musical note.',
+        ),
+    barSpace: z
+        .number()
+        .describe(
+            'Customize the spacing between bars in frequency bands modes (see mode). Use a value between 0 and 1 for spacing proportional to the band width. Values >= 1 will be considered as a literal number of pixels.',
+        ),
+    channelLayout: z
+        .enum(['single', 'dual-combined', 'dual-horizontal', 'dual-vertical'])
+        .describe('Defines the number and layout of analyzer channels.'),
+    colorMode: z
+        .enum(['gradient', 'bar-index', 'bar-level'])
+        .describe('Selects the desired mode for coloring the analyzer bars.'),
+    customGradients: z.array(
+        z.object({
+            colorStops: z.array(
+                z.object({
+                    color: z.string(),
+                    level: z.number().min(0).max(1).optional(),
+                    levelEnabled: z.boolean().optional(),
+                    pos: z.number().min(0).max(1).optional(),
+                    positionEnabled: z.boolean().optional(),
+                }),
+            ),
+            dir: z.string().optional(),
+            name: z.string(),
+        }),
+    ),
+    fadePeaks: z
+        .boolean()
+        .describe(
+            'When true, peaks fade out instead of falling down. It has no effect when peakLine is active.',
+        ),
+    fftSize: z
+        .number()
+        .describe(
+            'Number of samples used for the FFT performed by the AnalyzerNode. It must be a power of 2 between 32 and 32768, so valid values are: 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, and 32768. Higher values provide more detail in the frequency domain, but less detail in the time domain (slower response), so you may need to adjust smoothing accordingly.',
+        ),
+    fillAlpha: z.number(),
+    frequencyScale: z.enum(['bark', 'linear', 'log', 'mel']),
+    gradient: z.string(),
+    gradientLeft: z.string().optional(),
+    gradientRight: z.string().optional(),
+    gravity: z.number(),
+    ledBars: z.boolean(),
+    linearAmplitude: z.boolean(),
+    linearBoost: z.number(),
+    lineWidth: z.number(),
+    loRes: z.boolean(),
+    lumiBars: z.boolean(),
+    maxDecibels: z.number(),
+    maxFPS: z.number(),
+    maxFreq: z.number(),
+    minDecibels: z.number(),
+    minFreq: z.number(),
+    mirror: z.number(),
+    mode: z.number(),
+    noteLabels: z.boolean(),
+    opacity: z.number().min(0).max(1),
+    outlineBars: z.boolean(),
+    peakFadeTime: z.number(),
+    peakHoldTime: z.number(),
+    peakLine: z.boolean(),
+    presets: z.array(
+        z.object({
+            name: z.string(),
+            value: z.any(),
+        }),
+    ),
+    radial: z.boolean(),
+    radialInvert: z.boolean(),
+    radius: z.number(),
+    reflexAlpha: z.number(),
+    reflexBright: z.number(),
+    reflexFit: z.boolean(),
+    reflexRatio: z.number(),
+    roundBars: z.boolean(),
+    showFPS: z.boolean(),
+    showPeaks: z.boolean(),
+    showScaleX: z.boolean(),
+    showScaleY: z.boolean(),
+    smoothing: z.number(),
+    spinSpeed: z.number(),
+    splitGradient: z.boolean(),
+    trueLeds: z.boolean(),
+    volume: z.number(),
+    weightingFilter: z.enum(['', 'A', 'B', 'C', 'D', 'Z']),
+});
+
+const ButterchurnSettingsSchema = z.object({
+    blendTime: z.number().min(0).max(10),
+    currentPreset: z.string().optional(),
+    cyclePresets: z.boolean(),
+    cycleTime: z.number().min(1).max(300),
+    ignoredPresets: z.array(z.string()),
+    includeAllPresets: z.boolean(),
+    maxFPS: z.number().min(0),
+    opacity: z.number().min(0).max(1),
+    randomizeNextPreset: z.boolean(),
+    selectedPresets: z.array(z.string()),
+});
+
+const VisualizerSettingsSchema = z.object({
+    audiomotionanalyzer: AudioMotionAnalyzerSettingsSchema,
+    butterchurn: ButterchurnSettingsSchema,
+    type: z.enum(['audiomotionanalyzer', 'butterchurn']),
+});
+
+export const GeneralSettingsSchema = z.object({
+    accent: z
+        .string()
+        .refine(
+            (val) => /^rgb\(\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})\s*\)$/.test(val),
+            {
+                message: 'Accent must be a valid rgb() color string',
+            },
+        ),
+    albumBackground: z.boolean(),
+    albumBackgroundBlur: z.number(),
+    artistBackground: z.boolean(),
+    artistBackgroundBlur: z.number(),
+    artistItems: z.array(SortableItemSchema(ArtistItemSchema)),
+    artistRadioCount: z.number(),
+    buttonSize: z.number(),
+    combinedLyricsAndVisualizer: z.boolean(),
+    disabledContextMenu: z.record(z.string(), z.boolean()),
+    externalLinks: z.boolean(),
+    followCurrentSong: z.boolean(),
+    followSystemTheme: z.boolean(),
+    genreTarget: GenreTargetSchema,
+    homeFeature: z.boolean(),
+    homeItems: z.array(SortableItemSchema(HomeItemSchema)),
+    imageRes: z.object({
+        fullScreenPlayer: z.number(),
+        header: z.number(),
+        itemCard: z.number(),
+        sidebar: z.number(),
+        table: z.number(),
+    }),
+    language: z.string(),
+    lastFM: z.boolean(),
+    lastfmApiKey: z.string(),
+    musicBrainz: z.boolean(),
+    nativeAspectRatio: z.boolean(),
+    passwordStore: z.string().optional(),
+    playButtonBehavior: z.nativeEnum(Play),
+    playerbarOpenDrawer: z.boolean(),
+    playerbarSlider: PlayerbarSliderSchema,
+    resume: z.boolean(),
+    showLyricsInSidebar: z.boolean(),
+    showRatings: z.boolean(),
+    showVisualizerInSidebar: z.boolean(),
+    sidebarCollapsedNavigation: z.boolean(),
+    sidebarCollapseShared: z.boolean(),
+    sidebarItems: z.array(SidebarItemTypeSchema),
+    sidebarPanelOrder: z.array(SidebarPanelTypeSchema),
+    sidebarPlaylistList: z.boolean(),
+    sideQueueType: SideQueueTypeSchema,
+    skipButtons: SkipButtonsSchema,
+    theme: z.nativeEnum(AppTheme),
+    themeDark: z.nativeEnum(AppTheme),
+    themeLight: z.nativeEnum(AppTheme),
+    useThemeAccentColor: z.boolean(),
+    volumeWheelStep: z.number(),
+    volumeWidth: z.number(),
+    zoomFactor: z.number(),
+});
+
+const HotkeyBindingSchema = z.object({
+    allowGlobal: z.boolean(),
+    hotkey: z.string(),
+    isGlobal: z.boolean(),
+});
+
+const HotkeysSettingsSchema = z.object({
+    bindings: z
+        .record(BindingActionsSchema, HotkeyBindingSchema)
+        .refine((obj): obj is Required<typeof obj> =>
+            BindingActionsSchema.options.every((key) => obj[key] != null),
+        ),
+    globalMediaHotkeys: z.boolean(),
+});
+
+const LyricsDisplaySettingsSchema = z.object({
+    fontSize: z.number(),
+    fontSizeUnsync: z.number(),
+    gap: z.number(),
+    gapUnsync: z.number(),
+});
+
+const LyricsSettingsSchema = z.object({
+    alignment: z.enum(['center', 'left', 'right']),
+    delayMs: z.number(),
+    enableAutoTranslation: z.boolean(),
+    enableNeteaseTranslation: z.boolean(),
+    fetch: z.boolean(),
+    follow: z.boolean(),
+    preferLocalLyrics: z.boolean(),
+    showMatch: z.boolean(),
+    showProvider: z.boolean(),
+    sources: z.array(z.nativeEnum(LyricSource)),
+    translationApiKey: z.string(),
+    translationApiProvider: z.string().nullable(),
+    translationTargetLanguage: z.string().nullable(),
+});
+
+const ScrobbleSettingsSchema = z.object({
+    enabled: z.boolean(),
+    notify: z.boolean(),
+    scrobbleAtDuration: z.number(),
+    scrobbleAtPercentage: z.number(),
+});
+
+const PlayerFilterFieldSchema = z.enum([
+    'name',
+    'albumArtist',
+    'artist',
+    'duration',
+    'genre',
+    'year',
+    'note',
+    'path',
+    'playCount',
+    'favorite',
+    'rating',
+]);
+
+const PlayerFilterOperatorSchema = z.enum([
+    'is',
+    'isNot',
+    'contains',
+    'notContains',
+    'startsWith',
+    'endsWith',
+    'regex',
+    'gt',
+    'lt',
+    'inTheRange',
+    'before',
+    'after',
+    'beforeDate',
+    'afterDate',
+    'inTheRangeDate',
+    'inTheLast',
+    'notInTheLast',
+]);
+
+const PlayerFilterSchema = z.object({
+    field: PlayerFilterFieldSchema,
+    id: z.string(),
+    isEnabled: z.boolean().optional(),
+    operator: PlayerFilterOperatorSchema,
+    value: z.union([
+        z.string(),
+        z.number(),
+        z.boolean(),
+        z.array(z.union([z.string(), z.number()])),
+    ]),
+});
+
+const PlaybackSettingsSchema = z.object({
+    audioDeviceId: z.string().nullable().optional(),
+    audioFadeOnStatusChange: z.boolean(),
+    filters: z.array(PlayerFilterSchema),
+    mediaSession: z.boolean(),
+    mpvExtraParameters: z.array(z.string()),
+    mpvProperties: MpvSettingsSchema,
+    preservePitch: z.boolean(),
+    scrobble: ScrobbleSettingsSchema,
+    transcode: TranscodingConfigSchema,
+    type: z.nativeEnum(PlayerType),
+    webAudio: z.boolean(),
+});
+
+const RemoteSettingsSchema = z.object({
+    enabled: z.boolean(),
+    password: z.string(),
+    port: z.number(),
+    username: z.string(),
+});
+
+const WindowSettingsSchema = z.object({
+    disableAutoUpdate: z.boolean(),
+    exitToTray: z.boolean(),
+    minimizeToTray: z.boolean(),
+    preventSleepOnPlayback: z.boolean(),
+    releaseChannel: z.enum(['beta', 'latest']),
+    startMinimized: z.boolean(),
+    tray: z.boolean(),
+    windowBarStyle: z.nativeEnum(Platform),
+});
+
+const QueryValueInputTypeSchema = z.enum([
+    'boolean',
+    'date',
+    'dateRange',
+    'number',
+    'playlist',
+    'string',
+]);
+
+const QueryBuilderCustomFieldSchema = z.object({
+    label: z.string(),
+    type: QueryValueInputTypeSchema,
+    value: z.string(),
+});
+
+const QueryBuilderSettingsSchema = z.object({
+    tag: z.array(QueryBuilderCustomFieldSchema),
+});
+
+const AutoDJSettingsSchema = z.object({
+    enabled: z.boolean(),
+    itemCount: z.number(),
+    timing: z.number(),
+});
+
+/**
+ * This schema is used for validation of the imported settings json
+ */
+export const ValidationSettingsStateSchema = z.object({
+    autoDJ: AutoDJSettingsSchema,
+    css: CssSettingsSchema,
+    discord: DiscordSettingsSchema,
+    font: FontSettingsSchema,
+    general: GeneralSettingsSchema,
+    hotkeys: HotkeysSettingsSchema,
+    lists: z.record(z.nativeEnum(ItemListKey), ItemListConfigSchema),
+    lyrics: LyricsSettingsSchema,
+    lyricsDisplay: z.record(z.string(), LyricsDisplaySettingsSchema),
+    playback: PlaybackSettingsSchema,
+    queryBuilder: QueryBuilderSettingsSchema,
+    remote: RemoteSettingsSchema,
+    tab: z.union([
+        z.literal('general'),
+        z.literal('hotkeys'),
+        z.literal('playback'),
+        z.literal('window'),
+        z.string(),
+    ]),
+    visualizer: VisualizerSettingsSchema,
+    window: WindowSettingsSchema,
+});
+
+/**
+ * This schema is merged below to create the full SettingsSchema but not used during import validation
+ */
+export const NonValidatedSettingsStateSchema = z.object({});
+
+export const SettingsStateSchema = ValidationSettingsStateSchema.merge(
+    NonValidatedSettingsStateSchema,
+);
 
 export enum ArtistItem {
     BIOGRAPHY = 'biography',
-    COMPILATIONS = 'compilations',
     RECENT_ALBUMS = 'recentAlbums',
     SIMILAR_ARTISTS = 'similarArtists',
     TOP_SONGS = 'topSongs',
 }
 
-const artistItems = Object.values(ArtistItem).map((item) => ({
-    disabled: false,
-    id: item,
-}));
+export enum BarAlign {
+    BOTTOM = 'bottom',
+    CENTER = 'center',
+    TOP = 'top',
+}
 
 export enum BindingActions {
     BROWSER_BACK = 'browserBack',
@@ -177,199 +648,185 @@ export enum GenreTarget {
     TRACK = 'track',
 }
 
-export type DataTableProps = {
-    autoFit: boolean;
-    columns: PersistedTableColumn[];
-    followCurrentSong?: boolean;
-    rowHeight: number;
+export enum HomeItem {
+    GENRES = 'genres',
+    MOST_PLAYED = 'mostPlayed',
+    RANDOM = 'random',
+    RECENTLY_ADDED = 'recentlyAdded',
+    RECENTLY_PLAYED = 'recentlyPlayed',
+    RECENTLY_RELEASED = 'recentlyReleased',
+}
+
+export enum PlayerbarSliderType {
+    SLIDER = 'slider',
+    WAVEFORM = 'waveform',
+}
+
+export type DataGridProps = {
+    itemGap: 'lg' | 'md' | 'sm' | 'xl' | 'xs';
+    itemsPerRow: number;
+    itemsPerRowEnabled: boolean;
+    rows: ItemGridListRowConfig[];
+    size: 'compact' | 'default' | 'large';
 };
 
-export type PersistedTableColumn = {
-    column: TableColumn;
-    extraProps?: Partial<ColDef>;
-    width: number;
+export type DataTableProps = z.infer<typeof ItemTableListPropsSchema>;
+export type ItemListSettings = {
+    display: ListDisplayType;
+    grid: DataGridProps;
+    itemsPerPage: number;
+    pagination: ListPaginationType;
+    table: DataTableProps;
 };
 
-export interface SettingsSlice extends SettingsState {
+export type PlayerFilter = z.infer<typeof PlayerFilterSchema>;
+
+export type PlayerFilterField = z.infer<typeof PlayerFilterFieldSchema>;
+
+export type PlayerFilterOperator = z.infer<typeof PlayerFilterOperatorSchema>;
+
+export interface SettingsSlice extends z.infer<typeof SettingsStateSchema> {
     actions: {
         reset: () => void;
         resetSampleRate: () => void;
         setArtistItems: (item: SortableItem<ArtistItem>[]) => void;
         setGenreBehavior: (target: GenreTarget) => void;
         setHomeItems: (item: SortableItem<HomeItem>[]) => void;
+        setList: (type: ItemListKey, data: DeepPartial<ItemListSettings>) => void;
+        setPlaybackFilters: (filters: PlayerFilter[]) => void;
         setSettings: (data: Partial<SettingsState>) => void;
         setSidebarItems: (items: SidebarItemType[]) => void;
-        setTable: (type: TableType, data: DataTableProps) => void;
+        setTable: (type: ItemListKey, data: DataTableProps) => void;
         setTranscodingConfig: (config: TranscodingConfig) => void;
-        toggleContextMenuItem: (item: ContextMenuItemType) => void;
         toggleMediaSession: () => void;
         toggleSidebarCollapseShare: () => void;
     };
 }
+export interface SettingsState extends z.infer<typeof SettingsStateSchema> {}
+export type SidebarItemType = z.infer<typeof SidebarItemTypeSchema>;
 
-export interface SettingsState {
-    css: {
-        content: string;
-        enabled: boolean;
-    };
-    discord: {
-        clientId: string;
-        displayType: DiscordDisplayType;
-        enabled: boolean;
-        linkType: DiscordLinkType;
-        showAsListening: boolean;
-        showPaused: boolean;
-        showServerImage: boolean;
-    };
-    font: {
-        builtIn: string;
-        custom: null | string;
-        system: null | string;
-        type: FontType;
-    };
-    general: {
-        accent: string;
-        albumArtRes?: null | number;
-        albumBackground: boolean;
-        albumBackgroundBlur: number;
-        artistBackground: boolean;
-        artistBackgroundBlur: number;
-        artistItems: SortableItem<ArtistItem>[];
-        buttonSize: number;
-        disabledContextMenu: { [k in ContextMenuItemType]?: boolean };
-        doubleClickQueueAll: boolean;
-        externalLinks: boolean;
-        followSystemTheme: boolean;
-        genreTarget: GenreTarget;
-        homeFeature: boolean;
-        homeItems: SortableItem<HomeItem>[];
-        language: string;
-        lastFM: boolean;
-        lastfmApiKey: string;
-        musicBrainz: boolean;
-        nativeAspectRatio: boolean;
-        passwordStore?: string;
-        playButtonBehavior: Play;
-        playerbarOpenDrawer: boolean;
-        resume: boolean;
-        showQueueDrawerButton: boolean;
-        sidebarCollapsedNavigation: boolean;
-        sidebarCollapseShared: boolean;
-        sidebarItems: SidebarItemType[];
-        sidebarPlaylistList: boolean;
-        sideQueueType: SideQueueType;
-        skipButtons: {
-            enabled: boolean;
-            skipBackwardSeconds: number;
-            skipForwardSeconds: number;
-        };
-        theme: AppTheme;
-        themeDark: AppTheme;
-        themeLight: AppTheme;
-        volumeWheelStep: number;
-        volumeWidth: number;
-        zoomFactor: number;
-    };
-    hotkeys: {
-        bindings: Record<
-            BindingActions,
-            { allowGlobal: boolean; hotkey: string; isGlobal: boolean }
-        >;
-        globalMediaHotkeys: boolean;
-    };
-    lyrics: {
-        alignment: 'center' | 'left' | 'right';
-        delayMs: number;
-        enableNeteaseTranslation: boolean;
-        fetch: boolean;
-        follow: boolean;
-        fontSize: number;
-        fontSizeUnsync: number;
-        gap: number;
-        gapUnsync: number;
-        preferLocalLyrics: boolean;
-        showMatch: boolean;
-        showProvider: boolean;
-        sources: LyricSource[];
-        translationApiKey: string;
-        translationApiProvider: null | string;
-        translationTargetLanguage: null | string;
-    };
-    playback: {
-        audioDeviceId?: null | string;
-        crossfadeDuration: number;
-        crossfadeStyle: CrossfadeStyle;
-        mediaSession: boolean;
-        mpvExtraParameters: string[];
-        mpvProperties: MpvSettings;
-        muted: boolean;
-        preservePitch: boolean;
-        scrobble: {
-            enabled: boolean;
-            notify: boolean;
-            scrobbleAtDuration: number;
-            scrobbleAtPercentage: number;
-        };
-        style: PlaybackStyle;
-        transcode: TranscodingConfig;
-        type: PlaybackType;
-        webAudio: boolean;
-    };
-    remote: {
-        enabled: boolean;
-        password: string;
-        port: number;
-        username: string;
-    };
-    tab: 'general' | 'hotkeys' | 'playback' | 'window' | string;
-    tables: {
-        albumDetail: DataTableProps;
-        fullScreen: DataTableProps;
-        nowPlaying: DataTableProps;
-        sideDrawerQueue: DataTableProps;
-        sideQueue: DataTableProps;
-        songs: DataTableProps;
-    };
-    window: {
-        disableAutoUpdate: boolean;
-        exitToTray: boolean;
-        minimizeToTray: boolean;
-        preventSleepOnPlayback: boolean;
-        releaseChannel: 'beta' | 'latest';
-        startMinimized: boolean;
-        tray: boolean;
-        windowBarStyle: Platform;
-    };
-}
+export type SideQueueType = z.infer<typeof SideQueueTypeSchema>;
 
-export type SideQueueType = 'sideDrawerQueue' | 'sideQueue';
-
-export type TranscodingConfig = {
-    bitrate?: number;
-    enabled: boolean;
-    format?: string;
+export type SortableItem<T> = {
+    disabled: boolean;
+    id: T;
 };
 
-type MpvSettings = {
-    audioExclusiveMode: 'no' | 'yes';
-    audioFormat?: 'float' | 's16' | 's32';
-    audioSampleRateHz?: number;
-    gaplessAudio: 'no' | 'weak' | 'yes';
-    replayGainClip: boolean;
-    replayGainFallbackDB?: number;
-    replayGainMode: 'album' | 'no' | 'track';
-    replayGainPreampDB?: number;
-};
+export type TranscodingConfig = z.infer<typeof TranscodingConfigSchema>;
+
+export type VersionedSettings = SettingsState & { version: number };
+
+export const sidebarItems: SidebarItemType[] = [
+    {
+        disabled: true,
+        id: 'Now Playing',
+        label: i18n.t('page.sidebar.nowPlaying'),
+        route: AppRoute.NOW_PLAYING,
+    },
+    {
+        disabled: true,
+        id: 'Search',
+        label: i18n.t('page.sidebar.search'),
+        route: generatePath(AppRoute.SEARCH, { itemType: LibraryItem.SONG }),
+    },
+    { disabled: false, id: 'Home', label: i18n.t('page.sidebar.home'), route: AppRoute.HOME },
+    {
+        disabled: false,
+        id: 'Favorites',
+        label: i18n.t('page.sidebar.favorites'),
+        route: AppRoute.FAVORITES,
+    },
+    {
+        disabled: false,
+        id: 'Albums',
+        label: i18n.t('page.sidebar.albums'),
+        route: AppRoute.LIBRARY_ALBUMS,
+    },
+    {
+        disabled: false,
+        id: 'Tracks',
+        label: i18n.t('page.sidebar.tracks'),
+        route: AppRoute.LIBRARY_SONGS,
+    },
+    {
+        disabled: false,
+        id: 'Artists',
+        label: i18n.t('page.sidebar.albumArtists'),
+        route: AppRoute.LIBRARY_ALBUM_ARTISTS,
+    },
+    {
+        disabled: false,
+        id: 'Artists-all',
+        label: i18n.t('page.sidebar.artists'),
+        route: AppRoute.LIBRARY_ARTISTS,
+    },
+    {
+        disabled: false,
+        id: 'Genres',
+        label: i18n.t('page.sidebar.genres'),
+        route: AppRoute.LIBRARY_GENRES,
+    },
+    {
+        disabled: false,
+        id: 'Folders',
+        label: i18n.t('page.sidebar.folders'),
+        route: AppRoute.LIBRARY_FOLDERS,
+    },
+    {
+        disabled: true,
+        id: 'Playlists',
+        label: i18n.t('page.sidebar.playlists'),
+        route: AppRoute.PLAYLISTS,
+    },
+    {
+        disabled: false,
+        id: 'Radio',
+        label: i18n.t('page.sidebar.radio'),
+        route: AppRoute.RADIO,
+    },
+    {
+        disabled: true,
+        id: 'Settings',
+        label: i18n.t('page.sidebar.settings'),
+        route: AppRoute.SETTINGS,
+    },
+];
+
+const homeItems = Object.values(HomeItem).map((item) => ({
+    disabled: false,
+    id: item,
+}));
+
+const artistItems = Object.values(ArtistItem).map((item) => ({
+    disabled: false,
+    id: item,
+}));
 
 // Determines the default/initial windowBarStyle value based on the current platform.
 const getPlatformDefaultWindowBarStyle = (): Platform => {
-    // Prefer native window bar
-    return Platform.LINUX;
+    if (utils?.isWindows()) {
+        return Platform.WINDOWS;
+    }
+
+    if (utils?.isMacOS()) {
+        return Platform.MACOS;
+    }
+
+    if (utils?.isLinux()) {
+        return Platform.WINDOWS;
+    }
+
+    return Platform.WEB;
 };
 
 const platformDefaultWindowBarStyle: Platform = getPlatformDefaultWindowBarStyle();
 
 const initialState: SettingsState = {
+    autoDJ: {
+        enabled: false,
+        itemCount: 5,
+        timing: 1,
+    },
     css: {
         content: '',
         enabled: false,
@@ -391,20 +848,28 @@ const initialState: SettingsState = {
     },
     general: {
         accent: 'rgb(53, 116, 252)',
-        albumArtRes: undefined,
         albumBackground: false,
-        albumBackgroundBlur: 6,
-        artistBackground: false,
-        artistBackgroundBlur: 6,
+        albumBackgroundBlur: 3,
+        artistBackground: true,
+        artistBackgroundBlur: 3,
         artistItems,
+        artistRadioCount: 20,
         buttonSize: 15,
+        combinedLyricsAndVisualizer: false,
         disabledContextMenu: {},
-        doubleClickQueueAll: true,
         externalLinks: true,
+        followCurrentSong: true,
         followSystemTheme: false,
         genreTarget: GenreTarget.TRACK,
         homeFeature: true,
         homeItems,
+        imageRes: {
+            fullScreenPlayer: 0,
+            header: 300,
+            itemCard: 300,
+            sidebar: 400,
+            table: 80,
+        },
         language: 'en',
         lastFM: true,
         lastfmApiKey: '',
@@ -413,11 +878,21 @@ const initialState: SettingsState = {
         passwordStore: undefined,
         playButtonBehavior: Play.NOW,
         playerbarOpenDrawer: false,
+        playerbarSlider: {
+            barAlign: BarAlign.CENTER,
+            barGap: 1,
+            barRadius: 4,
+            barWidth: 2,
+            type: PlayerbarSliderType.SLIDER,
+        },
         resume: true,
-        showQueueDrawerButton: false,
+        showLyricsInSidebar: true,
+        showRatings: true,
+        showVisualizerInSidebar: true,
         sidebarCollapsedNavigation: true,
         sidebarCollapseShared: false,
         sidebarItems,
+        sidebarPanelOrder: ['queue', 'lyrics', 'visualizer'],
         sidebarPlaylistList: true,
         sideQueueType: 'sideQueue',
         skipButtons: {
@@ -428,6 +903,7 @@ const initialState: SettingsState = {
         theme: AppTheme.DEFAULT_DARK,
         themeDark: AppTheme.DEFAULT_DARK,
         themeLight: AppTheme.DEFAULT_LIGHT,
+        useThemeAccentColor: false,
         volumeWheelStep: 5,
         volumeWidth: 70,
         zoomFactor: 100,
@@ -469,18 +945,428 @@ const initialState: SettingsState = {
             zoomIn: { allowGlobal: true, hotkey: '', isGlobal: false },
             zoomOut: { allowGlobal: true, hotkey: '', isGlobal: false },
         },
-        globalMediaHotkeys: false,
+        globalMediaHotkeys: true,
+    },
+    lists: {
+        ['albumDetail']: {
+            display: ListDisplayType.TABLE,
+            grid: {
+                itemGap: 'sm',
+                itemsPerRow: 6,
+                itemsPerRowEnabled: false,
+                rows: [],
+                size: 'default',
+            },
+            itemsPerPage: 100,
+            pagination: ListPaginationType.INFINITE,
+            table: {
+                autoFitColumns: true,
+                columns: pickTableColumns({
+                    autoSizeColumns: [],
+                    columns: SONG_TABLE_COLUMNS,
+                    columnWidths: {
+                        [TableColumn.DURATION]: 100,
+                        [TableColumn.TITLE]: 400,
+                        [TableColumn.TRACK_NUMBER]: 50,
+                        [TableColumn.USER_FAVORITE]: 60,
+                    },
+                    enabledColumns: [
+                        TableColumn.TRACK_NUMBER,
+                        TableColumn.TITLE,
+                        TableColumn.DURATION,
+                        TableColumn.USER_FAVORITE,
+                    ],
+                }),
+                enableAlternateRowColors: false,
+                enableHorizontalBorders: false,
+                enableRowHoverHighlight: true,
+                enableVerticalBorders: false,
+                size: 'compact',
+            },
+        },
+        fullScreen: {
+            display: ListDisplayType.TABLE,
+            grid: {
+                itemGap: 'sm',
+                itemsPerRow: 6,
+                itemsPerRowEnabled: false,
+                rows: [],
+                size: 'default',
+            },
+            itemsPerPage: 100,
+            pagination: ListPaginationType.INFINITE,
+            table: {
+                autoFitColumns: true,
+                columns: SONG_TABLE_COLUMNS.map((column) => ({
+                    align: column.align,
+                    autoSize: column.autoSize,
+                    id: column.value,
+                    isEnabled: column.isEnabled,
+                    pinned: column.pinned,
+                    width: column.width,
+                })),
+                enableAlternateRowColors: false,
+                enableHorizontalBorders: false,
+                enableRowHoverHighlight: true,
+                enableVerticalBorders: false,
+                size: 'default',
+            },
+        },
+        [LibraryItem.ALBUM]: {
+            display: ListDisplayType.GRID,
+            grid: {
+                itemGap: 'sm',
+                itemsPerRow: 6,
+                itemsPerRowEnabled: false,
+                rows: pickGridRows({
+                    alignLeftColumns: [
+                        TableColumn.TITLE,
+                        TableColumn.ALBUM_ARTIST,
+                        TableColumn.YEAR,
+                    ],
+                    columns: ALBUM_TABLE_COLUMNS,
+                    enabledColumns: [TableColumn.TITLE, TableColumn.ALBUM_ARTIST, TableColumn.YEAR],
+                    pickColumns: [
+                        TableColumn.TITLE,
+                        TableColumn.DURATION,
+                        TableColumn.ALBUM_ARTIST,
+                        TableColumn.BIT_RATE,
+                        TableColumn.BPM,
+                        TableColumn.DATE_ADDED,
+                        TableColumn.GENRE,
+                        TableColumn.PLAY_COUNT,
+                        TableColumn.SONG_COUNT,
+                        TableColumn.RELEASE_DATE,
+                        TableColumn.LAST_PLAYED,
+                        TableColumn.YEAR,
+                    ],
+                }),
+                size: 'default',
+            },
+            itemsPerPage: 100,
+            pagination: ListPaginationType.INFINITE,
+            table: {
+                autoFitColumns: true,
+                columns: ALBUM_TABLE_COLUMNS.map((column) => ({
+                    align: column.align,
+                    autoSize: column.autoSize,
+                    id: column.value,
+                    isEnabled: column.isEnabled,
+                    pinned: column.pinned,
+                    width: column.width,
+                })),
+                enableAlternateRowColors: false,
+                enableHorizontalBorders: false,
+                enableRowHoverHighlight: true,
+                enableVerticalBorders: false,
+                size: 'default',
+            },
+        },
+        [LibraryItem.ALBUM_ARTIST]: {
+            display: ListDisplayType.GRID,
+            grid: {
+                itemGap: 'sm',
+                itemsPerRow: 6,
+                itemsPerRowEnabled: false,
+                rows: pickGridRows({
+                    alignLeftColumns: [TableColumn.TITLE],
+                    columns: ALBUM_ARTIST_TABLE_COLUMNS,
+                    enabledColumns: [TableColumn.TITLE],
+                    pickColumns: [
+                        TableColumn.TITLE,
+                        TableColumn.PLAY_COUNT,
+                        TableColumn.ALBUM_COUNT,
+                        TableColumn.SONG_COUNT,
+                    ],
+                }),
+                size: 'default',
+            },
+            itemsPerPage: 100,
+            pagination: ListPaginationType.INFINITE,
+            table: {
+                autoFitColumns: true,
+                columns: pickTableColumns({
+                    autoSizeColumns: [TableColumn.TITLE],
+                    columns: ALBUM_ARTIST_TABLE_COLUMNS,
+                    enabledColumns: [
+                        TableColumn.ROW_INDEX,
+                        TableColumn.IMAGE,
+                        TableColumn.TITLE,
+                        TableColumn.USER_FAVORITE,
+                    ],
+                }),
+                enableAlternateRowColors: false,
+                enableHorizontalBorders: false,
+                enableRowHoverHighlight: true,
+                enableVerticalBorders: false,
+                size: 'default',
+            },
+        },
+        [LibraryItem.ARTIST]: {
+            display: ListDisplayType.GRID,
+            grid: {
+                itemGap: 'sm',
+                itemsPerRow: 6,
+                itemsPerRowEnabled: false,
+                rows: pickGridRows({
+                    alignLeftColumns: [TableColumn.TITLE],
+                    columns: ALBUM_ARTIST_TABLE_COLUMNS,
+                    enabledColumns: [TableColumn.TITLE],
+                    pickColumns: [
+                        TableColumn.TITLE,
+                        TableColumn.PLAY_COUNT,
+                        TableColumn.ALBUM_COUNT,
+                        TableColumn.SONG_COUNT,
+                    ],
+                }),
+                size: 'default',
+            },
+            itemsPerPage: 100,
+            pagination: ListPaginationType.INFINITE,
+            table: {
+                autoFitColumns: true,
+                columns: pickTableColumns({
+                    autoSizeColumns: [TableColumn.TITLE],
+                    columns: ALBUM_ARTIST_TABLE_COLUMNS,
+                    enabledColumns: [
+                        TableColumn.ROW_INDEX,
+                        TableColumn.IMAGE,
+                        TableColumn.TITLE,
+                        TableColumn.ALBUM_COUNT,
+                        TableColumn.SONG_COUNT,
+                        TableColumn.PLAY_COUNT,
+                        TableColumn.LAST_PLAYED,
+                        TableColumn.USER_FAVORITE,
+                        TableColumn.USER_RATING,
+                    ],
+                }),
+                enableAlternateRowColors: false,
+                enableHorizontalBorders: false,
+                enableRowHoverHighlight: true,
+                enableVerticalBorders: false,
+                size: 'default',
+            },
+        },
+        [LibraryItem.GENRE]: {
+            display: ListDisplayType.TABLE,
+            grid: {
+                itemGap: 'sm',
+                itemsPerRow: 6,
+                itemsPerRowEnabled: false,
+                rows: pickGridRows({
+                    alignLeftColumns: [
+                        TableColumn.TITLE,
+                        TableColumn.SONG_COUNT,
+                        TableColumn.ALBUM_COUNT,
+                    ],
+                    columns: GENRE_TABLE_COLUMNS,
+                    enabledColumns: [
+                        TableColumn.TITLE,
+                        TableColumn.SONG_COUNT,
+                        TableColumn.ALBUM_COUNT,
+                    ],
+                    pickColumns: [
+                        TableColumn.TITLE,
+                        TableColumn.ALBUM_COUNT,
+                        TableColumn.SONG_COUNT,
+                    ],
+                }),
+                size: 'default',
+            },
+            itemsPerPage: 100,
+            pagination: ListPaginationType.INFINITE,
+            table: {
+                autoFitColumns: false,
+                columns: GENRE_TABLE_COLUMNS.map((column) => ({
+                    align: column.align,
+                    autoSize: column.autoSize,
+                    id: column.value,
+                    isEnabled: column.isEnabled,
+                    pinned: column.pinned,
+                    width: column.width,
+                })),
+                enableAlternateRowColors: false,
+                enableHorizontalBorders: false,
+                enableRowHoverHighlight: true,
+                enableVerticalBorders: false,
+                size: 'compact',
+            },
+        },
+        [LibraryItem.PLAYLIST]: {
+            display: ListDisplayType.TABLE,
+            grid: {
+                itemGap: 'sm',
+                itemsPerRow: 6,
+                itemsPerRowEnabled: false,
+                rows: pickGridRows({
+                    alignLeftColumns: [TableColumn.TITLE, TableColumn.SONG_COUNT],
+                    columns: PLAYLIST_TABLE_COLUMNS,
+                    enabledColumns: [TableColumn.TITLE],
+                    pickColumns: [TableColumn.TITLE, TableColumn.SONG_COUNT],
+                }),
+                size: 'default',
+            },
+            itemsPerPage: 100,
+            pagination: ListPaginationType.INFINITE,
+            table: {
+                autoFitColumns: true,
+                columns: pickTableColumns({
+                    autoSizeColumns: [TableColumn.TITLE],
+                    columns: PLAYLIST_TABLE_COLUMNS,
+                    enabledColumns: [
+                        TableColumn.ROW_INDEX,
+                        TableColumn.TITLE,
+                        TableColumn.DURATION,
+                        TableColumn.SONG_COUNT,
+                    ],
+                }),
+                enableAlternateRowColors: false,
+                enableHorizontalBorders: false,
+                enableRowHoverHighlight: true,
+                enableVerticalBorders: false,
+                size: 'default',
+            },
+        },
+        [LibraryItem.PLAYLIST_SONG]: {
+            display: ListDisplayType.TABLE,
+            grid: {
+                itemGap: 'sm',
+                itemsPerRow: 6,
+                itemsPerRowEnabled: false,
+                rows: [],
+                size: 'default',
+            },
+            itemsPerPage: 100,
+            pagination: ListPaginationType.INFINITE,
+            table: {
+                autoFitColumns: true,
+                columns: PLAYLIST_SONG_TABLE_COLUMNS.map((column) => ({
+                    align: column.align,
+                    autoSize: column.autoSize,
+                    id: column.value,
+                    isEnabled: column.isEnabled,
+                    pinned: column.pinned,
+                    width: column.width,
+                })),
+                enableAlternateRowColors: false,
+                enableHorizontalBorders: false,
+                enableRowHoverHighlight: true,
+                enableVerticalBorders: false,
+                size: 'default',
+            },
+        },
+        [LibraryItem.QUEUE_SONG]: {
+            display: ListDisplayType.TABLE,
+            grid: {
+                itemGap: 'sm',
+                itemsPerRow: 6,
+                itemsPerRowEnabled: false,
+                rows: [],
+                size: 'default',
+            },
+            itemsPerPage: 100,
+            pagination: ListPaginationType.INFINITE,
+            table: {
+                autoFitColumns: true,
+                columns: SONG_TABLE_COLUMNS.map((column) => ({
+                    align: column.align,
+                    autoSize: column.autoSize,
+                    id: column.value,
+                    isEnabled: column.isEnabled,
+                    pinned: column.pinned,
+                    width: column.width,
+                })),
+                enableAlternateRowColors: false,
+                enableHorizontalBorders: false,
+                enableRowHoverHighlight: true,
+                enableVerticalBorders: false,
+                size: 'default',
+            },
+        },
+        [LibraryItem.SONG]: {
+            display: ListDisplayType.TABLE,
+            grid: {
+                itemGap: 'sm',
+                itemsPerRow: 6,
+                itemsPerRowEnabled: false,
+                rows: pickGridRows({
+                    alignLeftColumns: [TableColumn.TITLE, TableColumn.ARTIST],
+                    columns: SONG_TABLE_COLUMNS,
+                    enabledColumns: [TableColumn.TITLE, TableColumn.ARTIST],
+                    pickColumns: [
+                        TableColumn.TITLE,
+                        TableColumn.ARTIST,
+                        TableColumn.DURATION,
+                        TableColumn.YEAR,
+                        TableColumn.BIT_RATE,
+                        TableColumn.BPM,
+                        TableColumn.CODEC,
+                        TableColumn.DATE_ADDED,
+                        TableColumn.GENRE,
+                        TableColumn.LAST_PLAYED,
+                        TableColumn.RELEASE_DATE,
+                        TableColumn.TRACK_NUMBER,
+                    ],
+                }),
+                size: 'default',
+            },
+            itemsPerPage: 100,
+            pagination: ListPaginationType.PAGINATED,
+            table: {
+                autoFitColumns: true,
+                columns: SONG_TABLE_COLUMNS.map((column) => ({
+                    align: column.align,
+                    autoSize: column.autoSize,
+                    id: column.value,
+                    isEnabled: column.isEnabled,
+                    pinned: column.pinned,
+                    width: column.width,
+                })),
+                enableAlternateRowColors: false,
+                enableHorizontalBorders: false,
+                enableRowHoverHighlight: true,
+                enableVerticalBorders: false,
+                size: 'default',
+            },
+        },
+        ['sideQueue']: {
+            display: ListDisplayType.TABLE,
+            grid: {
+                itemGap: 'sm',
+                itemsPerRow: 6,
+                itemsPerRowEnabled: false,
+                rows: [],
+                size: 'default',
+            },
+            itemsPerPage: 100,
+            pagination: ListPaginationType.INFINITE,
+            table: {
+                autoFitColumns: true,
+                columns: pickTableColumns({
+                    autoSizeColumns: [TableColumn.TITLE_COMBINED],
+                    columns: SONG_TABLE_COLUMNS,
+                    enabledColumns: [
+                        TableColumn.ROW_INDEX,
+                        TableColumn.TITLE_COMBINED,
+                        TableColumn.DURATION,
+                        TableColumn.USER_FAVORITE,
+                    ],
+                }),
+                enableAlternateRowColors: false,
+                enableHorizontalBorders: false,
+                enableRowHoverHighlight: true,
+                enableVerticalBorders: false,
+                size: 'default',
+            },
+        },
     },
     lyrics: {
         alignment: 'center',
         delayMs: 0,
+        enableAutoTranslation: false,
         enableNeteaseTranslation: false,
-        fetch: false,
+        fetch: true,
         follow: true,
-        fontSize: 24,
-        fontSizeUnsync: 24,
-        gap: 24,
-        gapUnsync: 24,
         preferLocalLyrics: true,
         showMatch: true,
         showProvider: true,
@@ -489,10 +1375,18 @@ const initialState: SettingsState = {
         translationApiProvider: '',
         translationTargetLanguage: 'en',
     },
+    lyricsDisplay: {
+        default: {
+            fontSize: 24,
+            fontSizeUnsync: 24,
+            gap: 24,
+            gapUnsync: 24,
+        },
+    },
     playback: {
         audioDeviceId: undefined,
-        crossfadeDuration: 5,
-        crossfadeStyle: CrossfadeStyle.EQUALPOWER,
+        audioFadeOnStatusChange: true,
+        filters: [],
         mediaSession: false,
         mpvExtraParameters: [],
         mpvProperties: {
@@ -505,7 +1399,6 @@ const initialState: SettingsState = {
             replayGainMode: 'no',
             replayGainPreampDB: 0,
         },
-        muted: false,
         preservePitch: true,
         scrobble: {
             enabled: true,
@@ -513,12 +1406,14 @@ const initialState: SettingsState = {
             scrobbleAtDuration: 240,
             scrobbleAtPercentage: 75,
         },
-        style: PlaybackStyle.GAPLESS,
         transcode: {
             enabled: false,
         },
-        type: PlaybackType.WEB,
+        type: PlayerType.WEB,
         webAudio: true,
+    },
+    queryBuilder: {
+        tag: [],
     },
     remote: {
         enabled: false,
@@ -527,159 +1422,72 @@ const initialState: SettingsState = {
         username: 'feishin',
     },
     tab: 'general',
-    tables: {
-        albumDetail: {
-            autoFit: true,
-            columns: [
-                {
-                    column: TableColumn.TRACK_NUMBER,
-                    width: 50,
-                },
-                {
-                    column: TableColumn.TITLE_COMBINED,
-                    width: 500,
-                },
-                {
-                    column: TableColumn.DURATION,
-                    width: 100,
-                },
-                {
-                    column: TableColumn.PLAY_COUNT,
-                    width: 100,
-                },
-                {
-                    column: TableColumn.LAST_PLAYED,
-                    width: 100,
-                },
-                {
-                    column: TableColumn.USER_FAVORITE,
-                    width: 100,
-                },
-            ],
-            rowHeight: 60,
+    visualizer: {
+        audiomotionanalyzer: {
+            alphaBars: false,
+            ansiBands: false,
+            barSpace: 0,
+            channelLayout: 'single',
+            colorMode: 'gradient',
+            customGradients: [],
+            fadePeaks: true,
+            fftSize: 8192,
+            fillAlpha: 1,
+            frequencyScale: 'log',
+            gradient: 'prism',
+            gravity: 11,
+            ledBars: true,
+            linearAmplitude: false,
+            linearBoost: 4,
+            lineWidth: 0,
+            loRes: false,
+            lumiBars: false,
+            maxDecibels: -25,
+            maxFPS: 0,
+            maxFreq: 8000,
+            minDecibels: -85,
+            minFreq: 20,
+            mirror: 0,
+            mode: 5,
+            noteLabels: false,
+            opacity: 1,
+            outlineBars: false,
+            peakFadeTime: 900,
+            peakHoldTime: 500,
+            peakLine: true,
+            presets: [],
+            radial: false,
+            radialInvert: false,
+            radius: 0.7,
+            reflexAlpha: 0.5,
+            reflexBright: 1,
+            reflexFit: false,
+            reflexRatio: 0,
+            roundBars: false,
+            showFPS: false,
+            showPeaks: false,
+            showScaleX: true,
+            showScaleY: false,
+            smoothing: 0.7,
+            spinSpeed: 0.5,
+            splitGradient: false,
+            trueLeds: false,
+            volume: 1,
+            weightingFilter: '',
         },
-        fullScreen: {
-            autoFit: true,
-            columns: [
-                {
-                    column: TableColumn.ROW_INDEX,
-                    width: 80,
-                },
-                {
-                    column: TableColumn.TITLE_COMBINED,
-                    width: 500,
-                },
-                {
-                    column: TableColumn.DURATION,
-                    width: 100,
-                },
-                {
-                    column: TableColumn.USER_FAVORITE,
-                    width: 100,
-                },
-            ],
-            followCurrentSong: true,
-            rowHeight: 60,
+        butterchurn: {
+            blendTime: 2.5,
+            currentPreset: undefined,
+            cyclePresets: true,
+            cycleTime: 30,
+            ignoredPresets: [],
+            includeAllPresets: true,
+            maxFPS: 0,
+            opacity: 1,
+            randomizeNextPreset: true,
+            selectedPresets: [],
         },
-        nowPlaying: {
-            autoFit: true,
-            columns: [
-                {
-                    column: TableColumn.ROW_INDEX,
-                    width: 80,
-                },
-                {
-                    column: TableColumn.TITLE,
-                    width: 500,
-                },
-                {
-                    column: TableColumn.DURATION,
-                    width: 100,
-                },
-                {
-                    column: TableColumn.ALBUM,
-                    width: 100,
-                },
-                {
-                    column: TableColumn.ALBUM_ARTIST,
-                    width: 100,
-                },
-                {
-                    column: TableColumn.GENRE,
-                    width: 100,
-                },
-                {
-                    column: TableColumn.YEAR,
-                    width: 100,
-                },
-            ],
-            followCurrentSong: true,
-            rowHeight: 30,
-        },
-        sideDrawerQueue: {
-            autoFit: true,
-            columns: [
-                {
-                    column: TableColumn.TITLE_COMBINED,
-                    width: 500,
-                },
-                {
-                    column: TableColumn.DURATION,
-                    width: 100,
-                },
-            ],
-            followCurrentSong: true,
-            rowHeight: 60,
-        },
-        sideQueue: {
-            autoFit: true,
-            columns: [
-                {
-                    column: TableColumn.ROW_INDEX,
-                    width: 50,
-                },
-                {
-                    column: TableColumn.TITLE_COMBINED,
-                    width: 500,
-                },
-                {
-                    column: TableColumn.DURATION,
-                    width: 100,
-                },
-            ],
-            followCurrentSong: true,
-            rowHeight: 60,
-        },
-        songs: {
-            autoFit: true,
-            columns: [
-                {
-                    column: TableColumn.ROW_INDEX,
-                    width: 50,
-                },
-                {
-                    column: TableColumn.TITLE_COMBINED,
-                    width: 500,
-                },
-                {
-                    column: TableColumn.DURATION,
-                    width: 100,
-                },
-                {
-                    column: TableColumn.ALBUM,
-                    width: 300,
-                },
-                {
-                    column: TableColumn.ARTIST,
-                    width: 100,
-                },
-                {
-                    column: TableColumn.YEAR,
-                    width: 100,
-                },
-            ],
-            rowHeight: 60,
-        },
+        type: 'audiomotionanalyzer',
     },
     window: {
         disableAutoUpdate: false,
@@ -693,23 +1501,67 @@ const initialState: SettingsState = {
     },
 };
 
+// Helper function to create a deep clone of initialState
+const getInitialState = (): SettingsState => {
+    const freshHomeItems = Object.values(HomeItem).map((item) => ({
+        disabled: false,
+        id: item,
+    }));
+
+    const freshArtistItems = Object.values(ArtistItem).map((item) => ({
+        disabled: false,
+        id: item,
+    }));
+
+    // Deep clone using JSON to ensure all nested objects/arrays are fresh copies
+    const clonedState = JSON.parse(JSON.stringify(initialState)) as SettingsState;
+
+    // Replace arrays that need fresh references
+    clonedState.general.homeItems = freshHomeItems;
+    clonedState.general.artistItems = freshArtistItems;
+    clonedState.general.sidebarItems = JSON.parse(
+        JSON.stringify(sidebarItems),
+    ) as SidebarItemType[];
+
+    // Regenerate random password for remote settings
+    clonedState.remote.password = randomString(8);
+
+    return clonedState;
+};
+
 export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
     persist(
         devtools(
             immer((set, get) => ({
                 actions: {
                     reset: () => {
-                        if (!isElectron()) {
-                            set({
-                                ...initialState,
-                                playback: {
-                                    ...initialState.playback,
-                                    type: PlaybackType.WEB,
-                                },
-                            });
-                        } else {
-                            set(initialState);
-                        }
+                        const freshState = getInitialState();
+                        set((state) => {
+                            // Deep clone the fresh state to ensure all nested objects/arrays are new references
+                            const resetState = JSON.parse(
+                                JSON.stringify(freshState),
+                            ) as SettingsState;
+
+                            // Override playback type for web if not electron
+                            if (!isElectron()) {
+                                resetState.playback.type = PlayerType.WEB;
+                            }
+
+                            // Replace all state properties (except actions) with the reset state
+                            state.css = resetState.css;
+                            state.discord = resetState.discord;
+                            state.font = resetState.font;
+                            state.general = resetState.general;
+                            state.hotkeys = resetState.hotkeys;
+                            state.lists = resetState.lists;
+                            state.lyrics = resetState.lyrics;
+                            state.playback = resetState.playback;
+                            state.queryBuilder = resetState.queryBuilder;
+                            state.remote = resetState.remote;
+                            state.tab = resetState.tab;
+                            state.visualizer = resetState.visualizer;
+                            state.window = resetState.window;
+                        });
                     },
                     resetSampleRate: () => {
                         set((state) => {
@@ -731,6 +1583,30 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                             state.general.homeItems = items;
                         });
                     },
+                    setList: (type: ItemListKey, data: DeepPartial<ItemListSettings>) => {
+                        set((state) => {
+                            const listState = state.lists[type];
+
+                            if (listState && data.table) {
+                                Object.assign(listState.table, data.table);
+                                delete data.table;
+                            }
+
+                            if (listState && data.grid) {
+                                Object.assign(listState.grid, data.grid);
+                                delete data.grid;
+                            }
+
+                            if (listState) {
+                                Object.assign(listState, data);
+                            }
+                        });
+                    },
+                    setPlaybackFilters: (filters: PlayerFilter[]) => {
+                        set((state) => {
+                            state.playback.filters = filters;
+                        });
+                    },
                     setSettings: (data) => {
                         set({ ...get(), ...data });
                     },
@@ -739,20 +1615,17 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                             state.general.sidebarItems = items;
                         });
                     },
-                    setTable: (type: TableType, data: DataTableProps) => {
+                    setTable: (type: ItemListKey, data: DataTableProps) => {
                         set((state) => {
-                            state.tables[type] = data;
+                            const listState = state.lists[type];
+                            if (listState) {
+                                listState.table = data;
+                            }
                         });
                     },
                     setTranscodingConfig: (config) => {
                         set((state) => {
                             state.playback.transcode = config;
-                        });
-                    },
-                    toggleContextMenuItem: (item: ContextMenuItemType) => {
-                        set((state) => {
-                            state.general.disabledContextMenu[item] =
-                                !state.general.disabledContextMenu[item];
                         });
                     },
                     toggleMediaSession: () => {
@@ -774,9 +1647,9 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
         {
             merge: mergeOverridingColumns,
             migrate(persistedState, version) {
-                console.log('migrate: ', version);
+                const state = persistedState as SettingsSlice;
+
                 if (version === 8) {
-                    const state = persistedState as SettingsSlice;
                     state.general.sidebarItems = state.general.sidebarItems.filter(
                         (item) => item.id !== 'Folders',
                     );
@@ -789,14 +1662,147 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                 }
 
                 if (version <= 9) {
-                    const state = persistedState as SettingsSlice;
+                    if (!state.window.releaseChannel) {
+                        state.window.releaseChannel = initialState.window.releaseChannel;
+                    }
+
+                    if (!state.playback.mediaSession) {
+                        state.playback.mediaSession = initialState.playback.mediaSession;
+                    }
+
+                    if (!state.general.artistBackgroundBlur) {
+                        state.general.artistBackgroundBlur =
+                            initialState.general.artistBackgroundBlur;
+                    }
+
+                    if (!state.general.artistBackground) {
+                        state.general.artistBackground = initialState.general.artistBackground;
+                    }
+
                     state.window.windowBarStyle = Platform.LINUX;
+
+                    return state;
+                }
+
+                if (version <= 10) {
+                    state.general.sidebarItems.push({
+                        disabled: false,
+                        id: 'Favorites',
+                        label: i18n.t('page.sidebar.favorites'),
+                        route: AppRoute.FAVORITES,
+                    });
+                }
+
+                if (version <= 11) {
+                    return {};
+                }
+
+                if (version <= 12) {
+                    state.general.sidebarItems.push({
+                        disabled: false,
+                        id: 'Folders',
+                        label: i18n.t('page.sidebar.folders'),
+                        route: AppRoute.LIBRARY_FOLDERS,
+                    });
+                }
+
+                if (version <= 13) {
+                    state.general.homeItems.push({
+                        disabled: false,
+                        id: HomeItem.GENRES,
+                    });
+                }
+
+                if (version <= 14) {
+                    // Add bitDepth and sampleRate columns to song lists
+
+                    const bitDepthColumn: ItemTableListColumnConfig = {
+                        align: 'center',
+                        autoSize: false,
+                        id: TableColumn.BIT_DEPTH,
+                        isEnabled: false,
+                        pinned: null,
+                        width: 100,
+                    };
+
+                    const sampleRateColumn: ItemTableListColumnConfig = {
+                        align: 'center',
+                        autoSize: false,
+                        id: TableColumn.SAMPLE_RATE,
+                        isEnabled: false,
+                        pinned: null,
+                        width: 100,
+                    };
+
+                    const columns = [bitDepthColumn, sampleRateColumn];
+
+                    state.lists[LibraryItem.SONG]?.table.columns.push(...columns);
+                    state.lists[LibraryItem.PLAYLIST_SONG]?.table.columns.push(...columns);
+                    state.lists[LibraryItem.QUEUE_SONG]?.table.columns.push(...columns);
+                    state.lists['albumDetail']?.table.columns.push(...columns);
+                    state.lists['fullscreen']?.table.columns.push(...columns);
+                    state.lists['sidequeue']?.table.columns.push(...columns);
+                }
+
+                if (version <= 15) {
+                    state.general.sidebarItems.push({
+                        disabled: false,
+                        id: 'Radio',
+                        label: i18n.t('page.sidebar.radio'),
+                        route: AppRoute.RADIO,
+                    });
+                }
+
+                // Version 16 introduced a bug where the release channel may have been reset
+                // to the latest channel. This is to revert it.
+                if (version === 16) {
+                    state.window.releaseChannel = 'beta';
+                }
+
+                if (version <= 17) {
+                    // Migrate lyrics settings from record structure to separate lyrics and lyricsDisplay
+                    if (
+                        state.lyrics &&
+                        typeof state.lyrics === 'object' &&
+                        'default' in state.lyrics
+                    ) {
+                        const oldLyrics = state.lyrics as any;
+                        const defaultSettings = oldLyrics.default || oldLyrics;
+
+                        // Extract display settings
+                        const displaySettings = {
+                            fontSize: defaultSettings.fontSize || 24,
+                            fontSizeUnsync: defaultSettings.fontSizeUnsync || 24,
+                            gap: defaultSettings.gap || 24,
+                            gapUnsync: defaultSettings.gapUnsync || 24,
+                        };
+
+                        // Remove display properties from main settings
+                        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                        const { fontSize, fontSizeUnsync, gap, gapUnsync, ...mainSettings } =
+                            defaultSettings;
+
+                        state.lyrics = mainSettings;
+                        state.lyricsDisplay = {
+                            default: displaySettings,
+                        };
+                    }
+                }
+
+                if (version <= 18) {
+                    // Add isEnabled property to all existing player filters
+                    if (state.playback?.filters && Array.isArray(state.playback.filters)) {
+                        state.playback.filters = state.playback.filters.map((filter) => ({
+                            ...filter,
+                            isEnabled: true,
+                        }));
+                    }
                 }
 
                 return persistedState;
             },
             name: 'store_settings',
-            version: 10,
+            version: 19,
         },
     ),
 );
@@ -805,21 +1811,12 @@ export const useSettingsStoreActions = () => useSettingsStore((state) => state.a
 
 export const usePlaybackSettings = () => useSettingsStore((state) => state.playback, shallow);
 
-export const useTableSettings = (type: TableType) =>
-    useSettingsStore((state) => state.tables[type]);
+export const useTableSettings = (type: ItemListKey) =>
+    useSettingsStore((state) => state.lists[type as keyof typeof state.lists]);
 
 export const useGeneralSettings = () => useSettingsStore((state) => state.general, shallow);
 
-export const usePlaybackType = () =>
-    useSettingsStore((state) => {
-        const isFallback = usePlayerStore.getState().fallback;
-
-        if (isFallback) {
-            return PlaybackType.WEB;
-        }
-
-        return state.playback.type;
-    });
+export const usePlaybackType = () => useSettingsStore((state) => state.playback.type, shallow);
 
 export const usePlayButtonBehavior = () =>
     useSettingsStore((state) => state.general.playButtonBehavior, shallow);
@@ -833,6 +1830,9 @@ export const useMpvSettings = () =>
 
 export const useLyricsSettings = () => useSettingsStore((state) => state.lyrics, shallow);
 
+export const useLyricsDisplaySettings = (key: string = 'default') =>
+    useSettingsStore((state) => state.lyricsDisplay[key] || state.lyricsDisplay.default, shallow);
+
 export const useRemoteSettings = () => useSettingsStore((state) => state.remote, shallow);
 
 export const useFontSettings = () => useSettingsStore((state) => state.font, shallow);
@@ -840,3 +1840,37 @@ export const useFontSettings = () => useSettingsStore((state) => state.font, sha
 export const useDiscordSettings = () => useSettingsStore((state) => state.discord, shallow);
 
 export const useCssSettings = () => useSettingsStore((state) => state.css, shallow);
+
+export const useQueryBuilderSettings = () =>
+    useSettingsStore((state) => state.queryBuilder, shallow);
+
+const getSettingsStoreVersion = () => useSettingsStore.persist.getOptions().version!;
+
+export const useSettingsForExport = (): SettingsState & { version: number } =>
+    useSettingsStore((state) => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- actions needs to be omitted from the export as it contains store functions
+        const { actions, ...otherSettings } = state;
+        return {
+            ...otherSettings,
+            version: getSettingsStoreVersion(),
+        };
+    });
+
+export const migrateSettings = (settings: SettingsState, settingsVersion: number): SettingsState =>
+    useSettingsStore.persist.getOptions().migrate!(settings, settingsVersion) as SettingsState;
+
+export const useListSettings = (type: ItemListKey) =>
+    useSettingsStore(
+        (state) => state.lists[type as keyof typeof state.lists],
+        shallow,
+    ) as ItemListSettings;
+
+export const usePrimaryColor = () => useSettingsStore((store) => store.general.accent);
+
+export const usePlayerbarSlider = () => useSettingsStore((store) => store.general.playerbarSlider);
+
+export const useGenreTarget = () => useSettingsStore((store) => store.general.genreTarget);
+
+export const useAutoDJSettings = () => useSettingsStore((store) => store.autoDJ, shallow);
+
+export const useVisualizerSettings = () => useSettingsStore((store) => store.visualizer, shallow);

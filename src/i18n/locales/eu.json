@@ -118,7 +118,13 @@
         "comingSoon": "laster…",
         "trackPeak": "pistaren gailurra",
         "albumPeak": "albumaren gailurra",
-        "gap": "hutsunea"
+        "gap": "hutsunea",
+        "explicitStatus": "egoera esplizitua",
+        "explicit": "esplizitua",
+        "clean": "garbia",
+        "private": "pribatua",
+        "public": "publikoa",
+        "releaseType": "argitalpen mota"
     },
     "player": {
         "repeat": "errepikatu",
@@ -158,9 +164,7 @@
             "view": {
                 "table": "taula",
                 "list": "zerrenda",
-                "card": "txartela",
-                "grid": "sareta",
-                "poster": "kartela"
+                "grid": "sareta"
             },
             "general": {
                 "gap": "$t(common.gap)",
@@ -330,12 +334,12 @@
         "releaseDate": "argitalpen data",
         "releaseYear": "argitalpen urtea",
         "toYear": "urtera arte",
-        "fromYear": "urtetik aurrera"
+        "fromYear": "urtetik aurrera",
+        "explicitStatus": "$t(common.explicitStatus)"
     },
     "setting": {
         "hotkey_playbackPause": "pausatu",
         "hotkey_playbackPlay": "erreproduzitu",
-        "language": "hizkuntza",
         "playbackStyle_optionNormal": "normala",
         "playButtonBehavior_optionPlay": "$t(player.play)",
         "playButtonBehavior_optionPlayShuffled": "$t(player.shuffle)",
@@ -391,8 +395,6 @@
         "lastfmApiKey_description": "{{lastfm}}-ren API gakoa. Azaleko arterako beharrezkoa.",
         "lyricFetch": "eskuratu letrak internetetik",
         "lyricFetch_description": "Eskuratu letrak hainbat internet iturrietatik",
-        "notify": "gaitu abesti japinarazpenak",
-        "notify_description": "erakutsi jakinarazpenak uneko abestia aldatzean",
         "audioExclusiveMode_description": "gaitu irteera esklusiboko modua. Modu honetan, sistema normalean blokeatuta egoten da, eta mpv-k bakarrik atera ahal izango du audioa",
         "audioDevice_description": "aukeratu erreproduzitzeko erabiliko den audio gailua (web erreproduzitzailea bakarrik)",
         "audioPlayer": "audio erreproduzitzailea",
@@ -400,7 +402,6 @@
         "buttonSize": "erreproduzitzaile barrako botoien tamaina",
         "crossfadeDuration": "crossfade iraupena",
         "crossfadeDuration_description": "crossfade efektuaren iraupena ezartzen du",
-        "crossfadeStyle": "crossfade estiloa",
         "crossfadeStyle_description": "aukeratu audio erreproduzitzailearentzat erabiliko den crossfade estiloa",
         "disableLibraryUpdateOnStartup": "desgaitu bertsio berrien egiaztapena abiaraztean",
         "discordApplicationId_description": "{{discord}} jarduera-egoeraren aplikazioaren IDa (lehenetsia {{defaultId}} da)",
@@ -410,7 +411,6 @@
         "discordIdleStatus_description": "gaituta dagoenean, eguneratu egoera erreproduzitzailea inaktibo dagoen bitartean",
         "discordListening_description": "erakutsi egoera entzuten bezala erreproduzitzen ordez",
         "discordListening": "erakutsi egoera entzuten bezala",
-        "discordRichPresence": "{{discord}} jarduera-egoera",
         "discordRichPresence_description": "gaitu erreprodukzioa egoera {{discord}}-en jarduera-egoeran. Irudi gakoak hauek dira: {{icon}}, {{playing}}, eta {{paused}}",
         "discordServeImage": "zerbitzatu {{discord}} irudiak zerbitzaritik",
         "discordServeImage_description": "partekatu {{discord}} jarduera-egoerarentzako azala artea zerbitzaritik bertatik, Jellyfin eta Navidrome-rentzat bakarrik eskuragarri. {{discord}}-(e)k bot bat erabiltzen du irudiak eskuratzeko, beraz, zure zerbitzaria internet publikotik eskuragarri egon behar da",
@@ -437,7 +437,7 @@
         "artistConfiguration": "albumaren artistaren konfigurazio orria",
         "artistConfiguration_description": "konfiguratu zein elementu erakusten diren eta zein ordenatan albumaren artistaren orrian",
         "audioExclusiveMode": "audio esklusiboko modua",
-        "releaseChannel_optionLatest": "egonkorra",
+        "releaseChannel_optionLatest": "azken bertsioa",
         "releaseChannel_optionBeta": "beta",
         "releaseChannel": "argitalpen kanala",
         "releaseChannel_description": "aukeratu argitalpen egonkorren edo beta artean eguneratze automatikoak lortzeko",
@@ -446,7 +446,6 @@
         "discordDisplayType_description": "zure egoeran entzuten ari zarena aldatzen du",
         "discordLinkType": "{{discord}} egoera estekak",
         "fontType_description": "barneko letra-tipoa feishinek eskaintzen dituen letra-tipoetako bat aukeratzen du. sistemaren letra-tipoa zure sistema eragileak eskaintzen duen edozein letra-tipo hautatzeko aukera ematen dizu. pertsonalizatua zure letra-tipoa eskaintzeko aukera ematen dizu",
-        "genreBehavior": "genero orriaren portaera lehenetsia",
         "homeConfiguration_description": "konfiguratu zein elementu erakusten diren hasierako orrian eta zein ordenatan",
         "homeFeature": "etxeko karrusela nabarmendua",
         "homeFeature_description": "hasierako orrian karrusel nabarmen handia erakutsi behar den ala ez kontrolatzen du",
@@ -494,7 +493,6 @@
         "accentColor": "azentu-kolorea",
         "clearCache_description": "feishinen 'garbiketa gogorra'. feishinen katxea garbitzeaz gain, hustu nabigatzailearen katxea (gordetako irudiak eta bestelako aktiboak). zerbitzari-kredentzialak eta ezarpenak gorde egiten dira",
         "clearQueryCache_description": "feishinen 'garbiketa ahula'. honek erreprodukzio-zerrendak eta pisten metadatuak freskatuko ditu eta gordetako letrak berrezarriko ditu. ezarpenak, zerbitzari-kredentzialak eta katxetutako irudiak gorde egiten dira",
-        "doubleClickBehavior": "jarri ilaran bilatutako pista guztiak klik bikoitza egitean",
         "exitToTray_description": "irten aplikaziotik sistemaren erretilura",
         "followLyric_description": "mugitu letra uneko erreprodukzio-posiziora",
         "preferLocalLyrics": "nahiago izan letra lokalak",
@@ -512,7 +510,6 @@
         "minimumScrobbleSeconds_description": "erreproduzitu behar den abestiaren gutxieneko iraupena segundotan scrobble egin aurretik",
         "mpvExecutablePath": "mpv exekutagarriaren bidea",
         "mpvExecutablePath_description": "ezartzen du mpv exekutagarriaren bidea. hutsik uzten bada, bide lehenetsia erabiliko da",
-        "mpvExtraParameters": "mpv parametroak",
         "mpvExtraParameters_help": "lerro bakoitzeko bat",
         "musicbrainz": "erakutsi MusicBrainz estekak",
         "musicbrainz_description": "erakutsi MusicbBrainz-erako estekak artista/album orrietan, MusicBrainz ID existitzen den lekuetan",
@@ -522,17 +519,24 @@
         "playbackStyle_description": "aukeratu audio erreproduzitzailearentzat erabiliko den erreprodukzio estiloa",
         "playButtonBehavior": "erreprodukzio botoiaren portaera",
         "playButtonBehavior_description": "ezartzen du erreprodukzio botoiaren portaera lehenetsia abestiak ilaran gehitzean",
-        "playerAlbumArtResolution": "erreproduzitzailearen albumaren arte-azalaren erresoluzioa",
         "gaplessAudio": "hutsune gabeko audioa",
         "gaplessAudio_description": "ezartzen du hutsunik gabeko audio ezarpena mpv-rako",
-        "genreBehavior_description": "genero batean klik egiteak abestien edo albumen zerrendan lehenespenez irekitzen den zehazten du",
         "passwordStore": "pasahitzak/biltegi sekretua",
         "playerbarOpenDrawer": "txandakatu erreproduzitzailearen barra pantaila osora",
         "playerbarOpenDrawer_description": "aukera ematen du erreproduzitzailearen barran klik egiteak pantaila osoko erreproduzitzailea irekitzeko",
         "customCssNotice": "Abisua: garbiketa batzuk dauden arren (url() eta content: debekatuz), css pertsonalizatua erabiltzeak arriskuak sor ditzake interfazea aldatuz gero",
         "customCss_description": "css eduki pertsonalizatua. Oharra: edukia eta urruneko URLak debekatutako propietateak dira. Zure edukiaren aurrebista erakusten da behean. Ezarri ez dituzun eremu gehigarriak daude garbiketa dela eta",
         "enableRemote": "gaitu urruneko kontrol zerbitzaria",
-        "enableRemote_description": "urruneko kontrol zerbitzariari beste gailu batzuei aplikazioa kontrolatzeko aukera ematen dio"
+        "enableRemote_description": "urruneko kontrol zerbitzariari beste gailu batzuei aplikazioa kontrolatzeko aukera ematen dio",
+        "imageAspectRatio_description": "gaituta badago, azaleko artea jatorrizko aspektu-erlazioa erabiliz erakutsiko da. 1:1 ez den arterako, gainerako espazioa hutsik egongo da",
+        "crossfadeStyle": "crossfade estiloa",
+        "discordRichPresence": "{{discord}}-en jarduera-egoera",
+        "enableAutoTranslation": "gaitu itzulpen automatikoa",
+        "exportImportSettings_control_exportText": "esportatu ezarpenak",
+        "exportImportSettings_control_importText": "inportatu ezarpenak",
+        "exportImportSettings_control_title": "inportatu / esportatu ezarpenak",
+        "exportImportSettings_importBtn": "inportatu ezarpenak",
+        "exportImportSettings_importModalTitle": "inportatu feishin ezarpenak"
     },
     "form": {
         "addServer": {
@@ -554,7 +558,9 @@
             "input_playlists": "$t(entity.playlist_other)",
             "success": "$t(entity.trackWithCount, {\"count\": {{message}} }) gehitu da $t(entity.playlistWithCount, {\"count\": {{numOfPlaylists}} })-ra",
             "input_skipDuplicates": "saltatu bikoiztuak",
-            "title": "gehitu $t(entity.playlist_one)-(a)ri"
+            "title": "gehitu $t(entity.playlist_one)-(a)ri",
+            "create": "sortu $t(entity.playlist_one) {{playlist}}",
+            "searchOrCreate": "bilatu $t(entity.playlist_other) edo idatzi berri bat sortzeko"
         },
         "createPlaylist": {
             "input_description": "$t(common.description)",
@@ -756,6 +762,18 @@
         },
         "playlist": {
             "reorder": "berrantolaketa IDaren arabera ordenatzean bakarrik gaituta dago"
+        }
+    },
+    "releaseType": {
+        "primary": {
+            "album": "$t(entity.album_one)",
+            "other": "bestelakoa"
+        },
+        "secondary": {
+            "compilation": "konpilazioa",
+            "audiobook": "audioliburua",
+            "interview": "elkarrizketa",
+            "remix": "nahasketa"
         }
     }
 }

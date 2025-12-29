@@ -118,7 +118,13 @@
         "trackGain": "усиление трека",
         "translation": "перевод",
         "albumPeak": "пик альбома",
-        "trackPeak": "пик трека"
+        "trackPeak": "пик трека",
+        "additionalParticipants": "Другие участники",
+        "newVersion": "новая версия приложения установлена ({{version}})",
+        "viewReleaseNotes": "Список изменений",
+        "bitDepth": "Разрядность",
+        "sampleRate": "частота дискретизации",
+        "tags": "теги"
     },
     "entity": {
         "album_one": "альбом",
@@ -178,9 +184,7 @@
     "table": {
         "config": {
             "view": {
-                "card": "карточки",
-                "table": "таблица",
-                "poster": "постер"
+                "table": "таблица"
             },
             "general": {
                 "displayType": "тип отображения",
@@ -272,7 +276,9 @@
         "loginRateError": "превышено максимальное количество попыток входа, пожалуйста, попробуйте ещё раз через несколько секунд",
         "openError": "не удалось открыть файл",
         "badAlbum": "вы видите эту страницу из-за того, что эта песня не входит в альбом. скорее всего, вы видите эту ошибку, так как песня находится в корневой директории папки с музыкой. Jellyfin группирует треки только по папкам",
-        "networkError": "возникла ошибка сети"
+        "networkError": "возникла ошибка сети",
+        "badValue": "Недопустимый параметр «{{value}}». Это значение больше не существует",
+        "notificationDenied": "Доступ к уведомлениям запрещен. Настройка не работает"
     },
     "filter": {
         "isCompilation": "сборник",
@@ -363,7 +369,9 @@
             "settings": "$t(common.setting_other)",
             "home": "$t(common.home)",
             "artists": "$t(entity.artist_other)",
-            "albumArtists": "$t(entity.albumArtist_other)"
+            "albumArtists": "$t(entity.albumArtist_other)",
+            "myLibrary": "Моя библиотека",
+            "shared": "Публичные плейлисты $t(entity.playlist_other)"
         },
         "fullscreenPlayer": {
             "config": {
@@ -398,7 +406,9 @@
             "openBrowserDevtools": "открыть инструменты разработчика",
             "quit": "$t(common.quit)",
             "goBack": "назад",
-            "goForward": "вперёд"
+            "goForward": "вперёд",
+            "privateModeOff": "Выключить приватный режим",
+            "privateModeOn": "Включить приватный режим"
         },
         "manageServers": {
             "title": "сервера",
@@ -427,14 +437,17 @@
             "numberSelected": "{{count}} выбрано",
             "removeFromQueue": "$t(action.removeFromQueue)",
             "showDetails": "получить информацию",
-            "shareItem": "поделиться"
+            "shareItem": "поделиться",
+            "goToAlbum": "Перейти к $t(entity.album_one)",
+            "goToAlbumArtist": "Перейти к $t(entity.albumArtist_one)"
         },
         "home": {
             "mostPlayed": "слушают чаще всего",
             "newlyAdded": "недавно добавленные релизы",
             "title": "$t(common.home)",
             "explore": "откройте новое",
-            "recentlyPlayed": "игралось недавно"
+            "recentlyPlayed": "игралось недавно",
+            "recentlyReleased": "Новинки"
         },
         "albumDetail": {
             "moreFromArtist": "больше от $t(entity.artist_one)",
@@ -458,7 +471,8 @@
         },
         "trackList": {
             "title": "$t(entity.track_other)",
-            "genreTracks": "\"{{genre}}\" $t(entity.track_other)"
+            "genreTracks": "\"{{genre}}\" $t(entity.track_other)",
+            "artistTracks": "Треки {{artist}}"
         },
         "globalSearch": {
             "commands": {
@@ -521,7 +535,9 @@
             "input_savePassword": "сохранить пароль",
             "ignoreSsl": "игнорировать ssl ($t(common.restartRequired))",
             "ignoreCors": "игнорировать CORS ($t(common.restartRequired))",
-            "error_savePassword": "произошла ошибка при сохранении пароля"
+            "error_savePassword": "произошла ошибка при сохранении пароля",
+            "input_preferInstantMix": "Предпочитать автоподборку",
+            "input_preferInstantMixDescription": "Использовать быстрый микс только для поиска похожих композиций. Полезно, если у вас есть плагины, которые изменяют это поведение"
         },
         "addToPlaylist": {
             "success": "добавлено: $t(entity.trackWithCount, {\"count\": {{message}} }) в $t(entity.playlistWithCount, {\"count\": {{numOfPlaylists}} })",
@@ -535,7 +551,8 @@
         },
         "queryEditor": {
             "input_optionMatchAll": "сопоставить все",
-            "input_optionMatchAny": "сопоставить любой"
+            "input_optionMatchAny": "сопоставить любой",
+            "title": "Редактор запросов"
         },
         "lyricSearch": {
             "input_name": "$t(common.name)",
@@ -544,7 +561,8 @@
         },
         "editPlaylist": {
             "title": "редактировать $t(entity.playlist_one)",
-            "success": "$t(entity.playlist_one) обновлён успешно"
+            "success": "$t(entity.playlist_one) обновлён успешно",
+            "publicJellyfinNote": "Jellyfin по какой-то причине не предоставляет информацию о том, публичный плейлист или нет. Если вы хотите, чтобы он остался публичным, выберите следующую опцию"
         },
         "shareItem": {
             "success": "ссылка скопирована в буфер обмена (нажмите здесь, чтобы открыть)",
@@ -553,6 +571,11 @@
             "allowDownloading": "разрешить скачивание",
             "setExpiration": "установить срок действия",
             "description": "описание"
+        },
+        "privateMode": {
+            "enabled": "Приватный режим включен. Статус воспроизведения скрыт от внешних интеграций",
+            "disabled": "Приватный режим отключен. Статус воспроизведения теперь виден внешним интеграциям",
+            "title": "Приватный режим"
         }
     },
     "setting": {
@@ -569,7 +592,6 @@
         "enableRemote_description": "включает сервер удалённого управления для управления воспроизведением с помощью других устройств",
         "fontType_optionSystem": "системный",
         "mpvExecutablePath_description": "укажите папку, в которой находится исполняющий файл аудиоплеера MPV. если оставить пустым, будет использоваться путь по умолчанию",
-        "crossfadeStyle": "вид эффекта crossfade",
         "fontType_optionBuiltIn": "встроенный",
         "disableLibraryUpdateOnStartup": "отключить проверку новых версий при запуске приложения",
         "minimizeToTray_description": "сворачивать приложение в панель уведомлений",
@@ -612,7 +634,6 @@
         "replayGainMode_optionTrack": "$t(entity.track_one)",
         "clearQueryCache_description": "так называемая \"мягкая очистка\" feishin: обновляются плейлисты, метаданные треков, но сохранённые тексты треков сбрасываются. настройки, учётные данные и кэшированные изображения сохраняются",
         "hotkey_favoriteCurrentSong": "добавить $t(common.currentSong) в избранное",
-        "genreBehavior": "поведения страницы жанров",
         "globalMediaHotkeys": "глобальные мультимедийные горячие клавиши",
         "hotkey_browserForward": "кнопка браузера \"вперёд\"",
         "hotkey_favoritePreviousSong": "добавить $t(common.previousSong) в избранное",
@@ -639,19 +660,16 @@
         "hotkey_unfavoritePreviousSong": "удалить $t(common.previousSong) из избранного",
         "hotkey_volumeUp": "увеличить громкость",
         "hotkey_zoomIn": "увеличить масштаб",
-        "language": "язык",
         "lyricFetchProvider_description": "выберите источники для получения текстов песен. порядок источников соответствует очередности их запросов",
         "minimumScrobblePercentage_description": "минимальный процент прослушивания трека, прежде чем он будет засчитан как прослушанный",
         "minimumScrobbleSeconds_description": "минимальное время прослушивания трека в секундах, прежде чем он будет засчитан как прослушанный",
         "playbackStyle_optionNormal": "нормальный",
-        "mpvExtraParameters": "параметры mpv",
         "mpvExtraParameters_help": "по одному на строчку",
         "playbackStyle_description": "выберите стиль воспроизведения, который будет использоваться аудиоплеером",
         "playButtonBehavior_description": "устанавливает поведение кнопки воспроизведения при добавлении треков в очередь",
         "playButtonBehavior": "поведение кнопки воспроизведения",
         "playButtonBehavior_optionAddNext": "$t(player.addNext)",
         "playButtonBehavior_optionPlay": "$t(player.play)",
-        "playerAlbumArtResolution_description": "разрешение большой версии обложки альбома в проигрывателе. при большем разрешении она выглядит более четкой, но может замедлить загрузку. по умолчанию равно 0 - устанавливает разрешение автоматически",
         "playerbarOpenDrawer": "полноэкранный переключатель по панели проигрывателя",
         "playerbarOpenDrawer_description": "позволяет перейти в полноэкранный режим воспроизведения нажатием на панель проигрывателя",
         "remotePort": "порт сервера удалённого управления",
@@ -676,8 +694,6 @@
         "useSystemTheme": "использовать тему системы",
         "themeLight": "тема (светлая)",
         "themeLight_description": "устанавливает светлую тему приложения",
-        "transcodeNote": "эффект применяется после 1 (для веб) - 2 (для mpv) песни",
-        "transcode": "включить транскодинг",
         "transcode_description": "активирует транскодинг в другие форматы",
         "transcodeBitrate": "битрейт транскодинга",
         "transcodeBitrate_description": "выберите битрейт транскодинга. 0 - автоматическое определение сервером",
@@ -685,8 +701,6 @@
         "useSystemTheme_description": "использует тему, заданную в системе (светлую/тёмную)",
         "zoom": "процент масштабирования",
         "zoom_description": "устанавливает процент масштабирования приложения",
-        "floatingQueueArea": "показать область наведения для всплывающей очереди",
-        "genreBehavior_description": "определяет, что отобразится при открытии на жанр — список треков или альбомов",
         "globalMediaHotkeys_description": "включить или отключить использование системных мультимедийных горячих клавиш для управления воспроизведением",
         "homeConfiguration_description": "позволяет настроить видимость и порядок элементов на домашней странице",
         "homeFeature": "улучшенная карусель на главной",
@@ -696,7 +710,6 @@
         "imageAspectRatio_description": "если эта опция включена, обложки будут отображаться в соответствии с их собственным соотношением сторон. для обложек не 1:1 оставшееся пространство будет пустым",
         "minimumScrobblePercentage": "минимальное время для скробблинга (в процентах)",
         "playbackStyle": "стиль воспроизведения",
-        "playerAlbumArtResolution": "разрешение обложки альбома",
         "remotePassword_description": "задает пароль для сервера удалённого управления. По умолчанию эти учетные данные передаются небезопасным способом, поэтому следует использовать уникальный пароль, который вам неважен",
         "replayGainClipping_description": "Предотвращение клиппинга, вызванного {{ReplayGain}}, путём автоматического снижения усиления",
         "replayGainFallback_description": "усиление в db для применения, если у файла нет тегов {{ReplayGain}}",
@@ -722,7 +735,6 @@
         "customFontPath": "путь к пользовательскому шрифту",
         "customFontPath_description": "укажите путь к пользовательскому шрифту, который будет использоваться в приложении",
         "externalLinks_description": "включает отображение внешних ссылок (Last.fm, MusicBrainz) на страницах альбомов и артистов",
-        "floatingQueueArea_description": "включить отображение иконки наведения на правой части экрана, чтобы показать очередь воспроизведения",
         "followLyric_description": "прокручивать текст трека до текущей позиции воспроизведения",
         "language_description": "устанавливает язык приложения ($t(common.restartRequired))",
         "lyricFetch_description": "получать тексты треков из различных интернет-источников",
@@ -744,15 +756,12 @@
         "volumeWidth_description": "ширина слайдера звука (в px)",
         "webAudio": "использовать веб аудио",
         "webAudio_description": "использование веб аудио. включение активирует продвинутые возможности (например, replaygain). отключите, если вам это не нужно",
-        "discordRichPresence": "состояние профиля {{discord}}",
         "discordApplicationId": "{{discord}} application id",
         "discordApplicationId_description": "application id приложения {{discord}} которое будет отображаться в статусе профиля (по умолчанию {{defaultId}})",
         "discordIdleStatus": "показывать состояние простоя",
         "discordIdleStatus_description": "если включено, то обновляет статус, когда пользователь бездействует",
         "discordUpdateInterval": "интервал обновления статуса профиля {{discord}}",
         "discordUpdateInterval_description": "время в секундах между каждым обновлением (минимум 15 секунд)",
-        "doubleClickBehavior": "добавить в очередь все найденные треки при двойном клике",
-        "doubleClickBehavior_description": "есть включено: все найденные в поиске треки будут добавлены в очередь при двойном клике (иначе - только выбранный)",
         "lyricOffset_description": "Смещение появления текста треков на указанное количество миллисекунд",
         "skipPlaylistPage": "пропускать страницу плейлиста",
         "applicationHotkeys_description": "настройка горячих клавиш приложения. поставьте галочку, чтобы сделать горячую клавишу глобальной (только для ПК)",
@@ -762,6 +771,23 @@
         "discordRichPresence_description": "включить статус воспроизведения в статус профиля в {{discord}}. Ключи изображений: {{icon}}, {{playing}} и {{paused}}",
         "lyricOffset": "синхронизация текста треков (мс)",
         "audioExclusiveMode": "эксклюзивный режим аудио",
-        "audioExclusiveMode_description": "включить режим эксклюзивного вывода. В этом режиме система обычно блокируется, и только mpv сможет выводить звук"
+        "audioExclusiveMode_description": "включить режим эксклюзивного вывода. В этом режиме система обычно блокируется, и только mpv сможет выводить звук",
+        "artistBackground": "Фоновое изображение исполнителя",
+        "artistBackground_description": "Добавляет фоновое изображение для страниц исполнителя, содержащих обложку исполнителя",
+        "artistBackgroundBlur": "процент размытия обложки исполнителя",
+        "artistBackgroundBlur_description": "регулирует процент размытия к заднему фону исполнителя"
+    },
+    "releaseType": {
+        "secondary": {
+            "demo": "демо",
+            "audiobook": "аудиокнига",
+            "compilation": "подборка",
+            "interview": "интервью",
+            "remix": "ремикс",
+            "live": "прямой эфир"
+        },
+        "primary": {
+            "other": "другие"
+        }
     }
 }
