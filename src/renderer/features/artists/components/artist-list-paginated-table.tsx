@@ -25,6 +25,7 @@ export const ArtistListPaginatedTable = ({
     autoFitColumns = false,
     columns,
     enableAlternateRowColors = false,
+    enableHeader = true,
     enableHorizontalBorders = false,
     enableRowHoverHighlight = true,
     enableSelection = true,
@@ -38,14 +39,14 @@ export const ArtistListPaginatedTable = ({
     serverId,
     size = 'default',
 }: ArtistListPaginatedTableProps) => {
+    const { currentPage, onChange } = useItemListPagination();
+
     const listCountQuery = artistsQueries.artistListCount({
-        query: { ...query },
+        query: { ...query, limit: itemsPerPage },
         serverId: serverId,
     }) as UseSuspenseQueryOptions<number, Error, number, readonly unknown[]>;
 
     const listQueryFn = api.controller.getArtistList;
-
-    const { currentPage, onChange } = useItemListPagination();
 
     const { data, pageCount, totalItemCount } = useItemListPaginatedLoader({
         currentPage,
@@ -87,6 +88,7 @@ export const ArtistListPaginatedTable = ({
                 data={data || []}
                 enableAlternateRowColors={enableAlternateRowColors}
                 enableExpansion={false}
+                enableHeader={enableHeader}
                 enableHorizontalBorders={enableHorizontalBorders}
                 enableRowHoverHighlight={enableRowHoverHighlight}
                 enableSelection={enableSelection}

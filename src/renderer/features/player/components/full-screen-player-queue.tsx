@@ -81,6 +81,7 @@ export const FullScreenPlayerQueue = () => {
                 gap={0}
                 grow
                 justify="center"
+                pb="md"
             >
                 {headerItems.map((item) => (
                     <div className={styles.headerItemWrapper} key={`tab-${item.label}`}>
@@ -91,7 +92,7 @@ export const FullScreenPlayerQueue = () => {
                             pos="relative"
                             size="lg"
                             uppercase
-                            variant="subtle"
+                            variant="transparent"
                         >
                             {item.label}
                         </Button>
@@ -106,7 +107,11 @@ export const FullScreenPlayerQueue = () => {
             </Group>
             {activeTab === 'queue' ? (
                 <div className={styles.queueContainer}>
-                    <PlayQueue listKey={ItemListKey.FULL_SCREEN} searchTerm={undefined} />
+                    <PlayQueue
+                        enableScrollShadow={false}
+                        listKey={ItemListKey.FULL_SCREEN}
+                        searchTerm={undefined}
+                    />
                 </div>
             ) : activeTab === 'related' ? (
                 <div className={styles.queueContainer}>

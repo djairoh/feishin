@@ -10,6 +10,7 @@ import { useItemListPagination } from '/@/renderer/components/item-list/item-lis
 import { ItemTableList } from '/@/renderer/components/item-list/item-table-list/item-table-list';
 import { ItemTableListColumn } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { ItemListTableComponentProps } from '/@/renderer/components/item-list/types';
+import { useListContext } from '/@/renderer/context/list-context';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import {
     AlbumListQuery,
@@ -25,6 +26,7 @@ export const AlbumListPaginatedTable = ({
     autoFitColumns = false,
     columns,
     enableAlternateRowColors = false,
+    enableHeader = true,
     enableHorizontalBorders = false,
     enableRowHoverHighlight = true,
     enableSelection = true,
@@ -38,18 +40,19 @@ export const AlbumListPaginatedTable = ({
     serverId,
     size = 'default',
 }: AlbumListPaginatedTableProps) => {
+    const { pageKey } = useListContext();
+    const { currentPage, onChange } = useItemListPagination();
+
     const listCountQuery = albumQueries.listCount({
-        query: { ...query },
+        query: { ...query, limit: itemsPerPage },
         serverId: serverId,
     }) as UseSuspenseQueryOptions<number, Error, number, readonly unknown[]>;
 
     const listQueryFn = api.controller.getAlbumList;
 
-    const { currentPage, onChange } = useItemListPagination();
-
     const { data, pageCount, totalItemCount } = useItemListPaginatedLoader({
         currentPage,
-        eventKey: ItemListKey.ALBUM,
+        eventKey: pageKey || ItemListKey.ALBUM,
         itemsPerPage,
         itemType: LibraryItem.ALBUM,
         listCountQuery,
@@ -86,6 +89,7 @@ export const AlbumListPaginatedTable = ({
                 columns={columns}
                 data={data || []}
                 enableAlternateRowColors={enableAlternateRowColors}
+                enableHeader={enableHeader}
                 enableHorizontalBorders={enableHorizontalBorders}
                 enableRowHoverHighlight={enableRowHoverHighlight}
                 enableSelection={enableSelection}

@@ -9,6 +9,7 @@ import { ItemListWithPagination } from '/@/renderer/components/item-list/item-li
 import { useItemListPagination } from '/@/renderer/components/item-list/item-list-pagination/use-item-list-pagination';
 import { ItemListGridComponentProps } from '/@/renderer/components/item-list/types';
 import { genresQueries } from '/@/renderer/features/genres/api/genres-api';
+import { useGeneralSettings } from '/@/renderer/store';
 import {
     GenreListQuery,
     GenreListSort,
@@ -55,7 +56,8 @@ export const GenreListPaginatedGrid = ({
         enabled: saveScrollOffset,
     });
 
-    const rows = useGridRows(LibraryItem.GENRE, ItemListKey.GENRE);
+    const rows = useGridRows(LibraryItem.GENRE, ItemListKey.GENRE, size);
+    const { enableGridMultiSelect } = useGeneralSettings();
 
     return (
         <ItemListWithPagination
@@ -68,6 +70,7 @@ export const GenreListPaginatedGrid = ({
             <ItemGridList
                 currentPage={currentPage}
                 data={data || []}
+                enableMultiSelect={enableGridMultiSelect}
                 gap={gap}
                 initialTop={{
                     to: scrollOffset ?? 0,

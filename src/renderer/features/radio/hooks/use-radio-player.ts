@@ -1,18 +1,10 @@
 import IcecastMetadataStats from 'icecast-metadata-stats';
 import isElectron from 'is-electron';
-import { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { createWithEqualityFn } from 'zustand/traditional';
 
 import { usePlayerEvents } from '/@/renderer/features/player/audio-player/hooks/use-player-events';
-import { convertToLogVolume } from '/@/renderer/features/player/audio-player/utils/player-utils';
-import {
-    usePlaybackType,
-    usePlayerMuted,
-    usePlayerStoreBase,
-    usePlayerVolume,
-    useSettingsStore,
-} from '/@/renderer/store';
-import { toast } from '/@/shared/components/toast/toast';
+import { usePlaybackType, usePlayerStoreBase, useSettingsStore } from '/@/renderer/store';
 import { PlayerStatus, PlayerType } from '/@/shared/types/types';
 
 export interface RadioMetadata {
@@ -130,10 +122,8 @@ export const useRadioAudioInstance = () => {
     const { setCurrentStreamUrl, setIsPlaying, setStationName } = actions;
     const currentStreamUrl = useRadioStore((state) => state.currentStreamUrl);
     const isPlaying = useRadioStore((state) => state.isPlaying);
+    const isRadioActive = useIsRadioActive();
     const playbackType = usePlaybackType();
-    const volume = usePlayerVolume();
-    const isMuted = usePlayerMuted();
-    const audioRef = useRef<HTMLAudioElement | null>(null);
     const isUsingMpv = playbackType === PlayerType.LOCAL && mpvPlayer;
 
     // Handle mpv playback
@@ -157,7 +147,7 @@ export const useRadioAudioInstance = () => {
     ]);
 
     useEffect(() => {
-        if (!isUsingMpv || !mpvPlayerListener || !ipc) {
+        if (!isUsingMpv || !mpvPlayerListener || !ipc || !isRadioActive) {
             return;
         }
 
@@ -184,94 +174,7 @@ export const useRadioAudioInstance = () => {
             ipc.removeAllListeners('renderer-player-pause');
             ipc.removeAllListeners('renderer-player-stop');
         };
-    }, [isUsingMpv, setIsPlaying, setCurrentStreamUrl, setStationName]);
-
-    // Handle web playback
-    useEffect(() => {
-        if (isUsingMpv) {
-            if (audioRef.current) {
-                audioRef.current.pause();
-                audioRef.current.src = '';
-                audioRef.current = null;
-            }
-            return;
-        }
-
-        if (currentStreamUrl && isPlaying) {
-            if (audioRef.current) {
-                audioRef.current.pause();
-                audioRef.current.src = '';
-            }
-
-            const audio = new Audio(currentStreamUrl);
-            audioRef.current = audio;
-
-            const linearVolume = volume / 100;
-            const logVolume = convertToLogVolume(linearVolume);
-            audio.volume = logVolume;
-            audio.muted = isMuted;
-
-            audio.addEventListener('play', () => {
-                setIsPlaying(true);
-            });
-
-            audio.addEventListener('pause', () => {
-                setIsPlaying(false);
-            });
-
-            audio.addEventListener('ended', () => {
-                setIsPlaying(false);
-                setCurrentStreamUrl(null);
-                setStationName(null);
-            });
-
-            audio.addEventListener('error', (error) => {
-                console.error('Radio stream error:', error);
-            });
-
-            // Attempt to play
-            audio.play().catch((error) => {
-                console.error('Failed to play audio:', error);
-                setIsPlaying(false);
-                setCurrentStreamUrl(null);
-                setStationName(null);
-                toast.error({ message: 'Failed to play radio stream' });
-            });
-        } else if (!currentStreamUrl || !isPlaying) {
-            if (audioRef.current) {
-                audioRef.current.pause();
-                audioRef.current.src = '';
-                audioRef.current = null;
-            }
-        }
-
-        return () => {
-            if (audioRef.current) {
-                audioRef.current.pause();
-                audioRef.current.src = '';
-                audioRef.current = null;
-            }
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [
-        currentStreamUrl,
-        isPlaying,
-        isUsingMpv,
-        setIsPlaying,
-        setCurrentStreamUrl,
-        setStationName,
-    ]);
-
-    useEffect(() => {
-        if (isUsingMpv || !audioRef.current) {
-            return;
-        }
-
-        const linearVolume = volume / 100;
-        const logVolume = convertToLogVolume(linearVolume);
-        audioRef.current.volume = logVolume;
-        audioRef.current.muted = isMuted;
-    }, [volume, isMuted, isUsingMpv]);
+    }, [isUsingMpv, isRadioActive, setIsPlaying, setCurrentStreamUrl, setStationName]);
 
     usePlayerEvents(
         {
@@ -383,4 +286,34 @@ export const useRadioMetadata = () => {
             setMetadata(null);
         };
     }, [currentStreamUrl, setMetadata, isUsingMpv]);
+};
+
+const RadioAudioInstanceHookInner = () => {
+    useRadioAudioInstance();
+    return null;
+};
+
+export const RadioAudioInstanceHook = () => {
+    const isRadioActive = useIsRadioActive();
+
+    if (!isRadioActive) {
+        return null;
+    }
+
+    return React.createElement(RadioAudioInstanceHookInner);
+};
+
+const RadioMetadataHookInner = () => {
+    useRadioMetadata();
+    return null;
+};
+
+export const RadioMetadataHook = () => {
+    const isRadioActive = useIsRadioActive();
+
+    if (!isRadioActive) {
+        return null;
+    }
+
+    return React.createElement(RadioMetadataHookInner);
 };

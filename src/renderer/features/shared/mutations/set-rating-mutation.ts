@@ -3,6 +3,7 @@ import { AxiosError } from 'axios';
 import { useTranslation } from 'react-i18next';
 
 import { api } from '/@/renderer/api';
+import { queryKeys } from '/@/renderer/api/query-keys';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
 import { PreviousQueryData } from '/@/renderer/features/shared/mutations/favorite-optimistic-updates';
 import {
@@ -11,11 +12,11 @@ import {
 } from '/@/renderer/features/shared/mutations/rating-optimistic-updates';
 import { MutationHookArgs } from '/@/renderer/lib/react-query';
 import { toast } from '/@/shared/components/toast/toast';
-import { RatingResponse, SetRatingArgs } from '/@/shared/types/domain-types';
+import { LibraryItem, RatingResponse, SetRatingArgs } from '/@/shared/types/domain-types';
 
 const setRatingMutationKey = ['set-rating'];
 
-export const useSetRating = (args: MutationHookArgs) => {
+export const useSetRatingMutation = (args: MutationHookArgs) => {
     const { options } = args || {};
     const queryClient = useQueryClient();
     const { t } = useTranslation();
@@ -55,6 +56,19 @@ export const useSetRating = (args: MutationHookArgs) => {
             });
 
             return applyRatingOptimisticUpdates(queryClient, variables, variables.query.rating);
+        },
+        onSuccess: (_data, variables) => {
+            if (
+                variables.query.type === LibraryItem.SONG ||
+                variables.query.type === LibraryItem.PLAYLIST_SONG ||
+                variables.query.type === LibraryItem.QUEUE_SONG
+            ) {
+                queryClient.invalidateQueries({
+                    queryKey: queryKeys.albumArtists.favoriteSongs(
+                        variables.apiClientProps.serverId,
+                    ),
+                });
+            }
         },
         ...options,
     });

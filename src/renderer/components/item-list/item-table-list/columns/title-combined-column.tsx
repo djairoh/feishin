@@ -1,6 +1,6 @@
 import clsx from 'clsx';
-import { CSSProperties, useMemo, useState } from 'react';
-import { generatePath, Link } from 'react-router';
+import { CSSProperties, useState } from 'react';
+import { Link } from 'react-router';
 
 import styles from './title-combined-column.module.css';
 
@@ -12,21 +12,24 @@ import {
     ItemTableListInnerColumn,
     TableColumnContainer,
 } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
+import { useIsActiveRow } from '/@/renderer/components/item-list/item-table-list/item-table-list-context';
+import { JoinedArtists } from '/@/renderer/features/albums/components/joined-artists';
 import { PlayButton } from '/@/renderer/features/shared/components/play-button';
 import {
     LONG_PRESS_PLAY_BEHAVIOR,
     PlayTooltip,
 } from '/@/renderer/features/shared/components/play-button-group';
-import { AppRoute } from '/@/renderer/router/routes';
 import { usePlayButtonBehavior } from '/@/renderer/store';
+import { ExplicitIndicator } from '/@/shared/components/explicit-indicator/explicit-indicator';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Text } from '/@/shared/components/text/text';
-import { Folder, LibraryItem, QueueSong, RelatedAlbumArtist } from '/@/shared/types/domain-types';
+import { Folder, LibraryItem, QueueSong } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
 
 export const DefaultTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
-    const row: object | undefined = (props.data as (any | undefined)[])[props.rowIndex]?.id;
-    const item = props.data[props.rowIndex] as any;
+    const rowItem = props.getRowItem?.(props.rowIndex) ?? (props.data as any[])[props.rowIndex];
+    const row: object | undefined = (rowItem as any)?.id;
+    const item = rowItem as any;
     const internalState = (props as any).internalState;
     const playButtonBehavior = usePlayButtonBehavior();
     const [isHovered, setIsHovered] = useState(false);
@@ -55,6 +58,7 @@ export const DefaultTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
                 itemType: props.itemType,
                 meta: {
                     playType,
+                    singleSongOnly: true,
                 },
             });
             return;
@@ -73,23 +77,13 @@ export const DefaultTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
         });
     };
 
-    const artists = useMemo(() => {
-        if (row && 'artists' in item && Array.isArray(item.artists)) {
-            return (item.artists as RelatedAlbumArtist[]).map((artist) => {
-                const path = generatePath(AppRoute.LIBRARY_ARTISTS_DETAIL, {
-                    artistId: artist.id,
-                });
-                return { ...artist, path };
-            });
-        }
-        return [];
-    }, [item, row]);
-
     if (item && 'name' in item && 'imageUrl' in item && 'artists' in item) {
         const rowHeight = props.getRowHeight(props.rowIndex, props);
-        const path = getTitlePath(props.itemType, (props.data[props.rowIndex] as any).id as string);
+        const path = getTitlePath(props.itemType, (rowItem as any).id as string);
+        const align = props.columns[props.columnIndex]?.align || 'start';
+        const hasAlbumGroupColumn = props.hasAlbumGroupColumn ?? false;
 
-        const item = props.data[props.rowIndex] as any;
+        const item = rowItem as any;
         const titleLinkProps = path
             ? {
                   component: Link,
@@ -101,67 +95,72 @@ export const DefaultTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
 
         return (
             <TableColumnContainer
-                className={styles.titleCombined}
+                className={clsx(styles.titleCombined, {
+                    [styles.noImage]: hasAlbumGroupColumn,
+                })}
                 containerStyle={{ '--row-height': `${rowHeight}px` } as CSSProperties}
                 {...props}
             >
-                <div
-                    className={styles.imageContainer}
-                    onMouseEnter={() => setIsHovered(true)}
-                    onMouseLeave={() => setIsHovered(false)}
-                >
-                    <ItemImage
-                        containerClassName={styles.image}
-                        id={item?.id}
-                        itemType={item?._itemType}
-                        src={item?.imageUrl}
-                    />
-                    {isHovered && (
-                        <div
-                            className={clsx(styles.playButtonOverlay, {
-                                [styles.compactPlayButtonOverlay]: props.size === 'compact',
-                            })}
-                        >
-                            <PlayTooltip
-                                disabled={props.itemType === LibraryItem.QUEUE_SONG}
-                                type={playButtonBehavior}
+                {!hasAlbumGroupColumn && (
+                    <div
+                        className={styles.imageContainer}
+                        onMouseEnter={() => setIsHovered(true)}
+                        onMouseLeave={() => setIsHovered(false)}
+                    >
+                        <ItemImage
+                            containerClassName={styles.image}
+                            enableDebounce={true}
+                            enableViewport={false}
+                            explicitStatus={item?.explicitStatus}
+                            id={item?.imageId}
+                            itemType={item?._itemType}
+                            src={item?.imageUrl}
+                            type="table"
+                        />
+                        {isHovered && (
+                            <div
+                                className={clsx(styles.playButtonOverlay, {
+                                    [styles.compactPlayButtonOverlay]: props.size === 'compact',
+                                })}
                             >
-                                <PlayButton
-                                    fill
-                                    onClick={(e) => handlePlay(playButtonBehavior, e)}
-                                    onLongPress={(e) =>
-                                        handlePlay(LONG_PRESS_PLAY_BEHAVIOR[playButtonBehavior], e)
-                                    }
-                                />
-                            </PlayTooltip>
-                        </div>
-                    )}
-                </div>
+                                <PlayTooltip
+                                    disabled={props.itemType === LibraryItem.QUEUE_SONG}
+                                    type={playButtonBehavior}
+                                >
+                                    <PlayButton
+                                        fill
+                                        onClick={(e) => handlePlay(playButtonBehavior, e)}
+                                        onLongPress={(e) =>
+                                            handlePlay(
+                                                LONG_PRESS_PLAY_BEHAVIOR[playButtonBehavior],
+                                                e,
+                                            )
+                                        }
+                                    />
+                                </PlayTooltip>
+                            </div>
+                        )}
+                    </div>
+                )}
                 <div
                     className={clsx(styles.textContainer, {
+                        [styles.alignCenter]: align === 'center',
+                        [styles.alignLeft]: align === 'start',
+                        [styles.alignRight]: align === 'end',
                         [styles.compact]: props.size === 'compact',
                     })}
                 >
                     <Text className={styles.title} isNoSelect size="md" {...titleLinkProps}>
+                        <ExplicitIndicator explicitStatus={item?.explicitStatus} />
                         {item.name as string}
                     </Text>
                     <div className={styles.artists}>
-                        {artists.map((artist, index) => (
-                            <span key={artist.id}>
-                                <Text
-                                    component={Link}
-                                    isLink
-                                    isMuted
-                                    isNoSelect
-                                    size="sm"
-                                    state={{ item: artist }}
-                                    to={artist.path}
-                                >
-                                    {artist.name}
-                                </Text>
-                                {index < artists.length - 1 && ', '}
-                            </span>
-                        ))}
+                        <JoinedArtists
+                            artistName={item.albumArtist}
+                            artists={item.albumArtists}
+                            linkProps={{ fw: 400, isMuted: true }}
+                            rootTextProps={{ fw: 400, isMuted: true, size: 'sm' }}
+                        />
                     </div>
                 </div>
             </TableColumnContainer>
@@ -176,16 +175,15 @@ export const DefaultTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
 };
 
 export const QueueSongTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
-    const row: object | undefined = (props.data as (any | undefined)[])[props.rowIndex];
+    const rowItem = props.getRowItem?.(props.rowIndex) ?? (props.data as any[])[props.rowIndex];
+    const row: object | undefined = rowItem as any;
 
-    const song = props.data[props.rowIndex] as QueueSong;
-    const item = props.data[props.rowIndex] as any;
+    const song = rowItem as QueueSong;
+    const item = rowItem as any;
     const internalState = (props as any).internalState;
     const playButtonBehavior = usePlayButtonBehavior();
     const [isHovered, setIsHovered] = useState(false);
-    const isActive =
-        !!props.activeRowId &&
-        (props.activeRowId === song?.id || props.activeRowId === song?._uniqueId);
+    const isActive = useIsActiveRow(song?.id, song?._uniqueId);
 
     const handlePlay = (playType: Play, event: React.MouseEvent<HTMLButtonElement>) => {
         if (!item) {
@@ -211,6 +209,7 @@ export const QueueSongTitleCombinedColumn = (props: ItemTableListInnerColumn) =>
                 itemType: props.itemType,
                 meta: {
                     playType,
+                    singleSongOnly: true,
                 },
             });
             return;
@@ -229,24 +228,13 @@ export const QueueSongTitleCombinedColumn = (props: ItemTableListInnerColumn) =>
         });
     };
 
-    const artists = useMemo(() => {
-        if (row && 'artists' in row && Array.isArray(row.artists)) {
-            return (row.artists as RelatedAlbumArtist[]).map((artist) => {
-                const path = generatePath(AppRoute.LIBRARY_ARTISTS_DETAIL, {
-                    artistId: artist.id,
-                });
-                return { ...artist, path };
-            });
-        }
-        return [];
-    }, [row]);
-
     if (row && 'name' in row && 'imageUrl' in row && 'artists' in row) {
         const rowHeight = props.getRowHeight(props.rowIndex, props);
-        const path = getTitlePath(props.itemType, (props.data[props.rowIndex] as any).id as string);
+        const path = getTitlePath(props.itemType, (rowItem as any).id as string);
+        const align = props.columns[props.columnIndex]?.align || 'start';
+        const hasAlbumGroupColumn = props.hasAlbumGroupColumn ?? false;
 
-        const item = props.data[props.rowIndex] as any;
-        const textStyles = isActive ? { color: 'var(--theme-colors-primary)' } : {};
+        const item = rowItem as any;
 
         const titleLinkProps = path
             ? {
@@ -259,84 +247,105 @@ export const QueueSongTitleCombinedColumn = (props: ItemTableListInnerColumn) =>
 
         return (
             <TableColumnContainer
-                className={styles.titleCombined}
+                className={clsx(styles.titleCombined, {
+                    [styles.noImage]: hasAlbumGroupColumn,
+                })}
                 containerStyle={{ '--row-height': `${rowHeight}px` } as CSSProperties}
                 {...props}
             >
-                <div
-                    className={styles.imageContainer}
-                    onMouseEnter={() => setIsHovered(true)}
-                    onMouseLeave={() => setIsHovered(false)}
-                >
-                    <ItemImage
-                        containerClassName={styles.image}
-                        id={item?.id}
-                        itemType={item?._itemType}
-                        src={item?.imageUrl}
-                    />
-                    {isHovered && (
-                        <div
-                            className={clsx(styles.playButtonOverlay, {
-                                [styles.compactPlayButtonOverlay]: props.size === 'compact',
-                            })}
-                        >
-                            <PlayTooltip
-                                disabled={props.itemType === LibraryItem.QUEUE_SONG}
-                                type={playButtonBehavior}
+                {!hasAlbumGroupColumn && (
+                    <div
+                        className={styles.imageContainer}
+                        onMouseEnter={() => setIsHovered(true)}
+                        onMouseLeave={() => setIsHovered(false)}
+                    >
+                        <ItemImage
+                            containerClassName={styles.image}
+                            explicitStatus={item?.explicitStatus}
+                            id={item?.imageId}
+                            itemType={item?._itemType}
+                            serverId={item?._serverId}
+                            src={item?.imageUrl}
+                            type="table"
+                        />
+                        {isHovered && (
+                            <div
+                                className={clsx(styles.playButtonOverlay, {
+                                    [styles.compactPlayButtonOverlay]: props.size === 'compact',
+                                })}
                             >
-                                <PlayButton
-                                    fill
-                                    onClick={(e) => handlePlay(playButtonBehavior, e)}
-                                    onLongPress={(e) =>
-                                        handlePlay(LONG_PRESS_PLAY_BEHAVIOR[playButtonBehavior], e)
-                                    }
-                                />
-                            </PlayTooltip>
-                        </div>
-                    )}
-                </div>
+                                <PlayTooltip
+                                    disabled={props.itemType === LibraryItem.QUEUE_SONG}
+                                    type={playButtonBehavior}
+                                >
+                                    <PlayButton
+                                        fill
+                                        onClick={(e) => handlePlay(playButtonBehavior, e)}
+                                        onLongPress={(e) =>
+                                            handlePlay(
+                                                LONG_PRESS_PLAY_BEHAVIOR[playButtonBehavior],
+                                                e,
+                                            )
+                                        }
+                                    />
+                                </PlayTooltip>
+                            </div>
+                        )}
+                    </div>
+                )}
                 <div
                     className={clsx(styles.textContainer, {
+                        [styles.active]: isActive,
+                        [styles.alignCenter]: align === 'center',
+                        [styles.alignLeft]: align === 'start',
+                        [styles.alignRight]: align === 'end',
                         [styles.compact]: props.size === 'compact',
                     })}
                 >
                     <Text
-                        className={styles.title}
+                        className={clsx({
+                            [styles.active]: isActive,
+                            [styles.title]: true,
+                        })}
                         isNoSelect
                         size="md"
                         {...titleLinkProps}
-                        style={textStyles}
                     >
+                        <ExplicitIndicator explicitStatus={song?.explicitStatus} />
                         {row.name as string}
+                        {song?.trackSubtitle && props.itemType !== LibraryItem.QUEUE_SONG && (
+                            <Text
+                                className={clsx({
+                                    [styles.active]: isActive,
+                                })}
+                                component="span"
+                                isMuted
+                                size="sm"
+                            >
+                                {' ('}
+                                {song.trackSubtitle}
+                                {')'}
+                            </Text>
+                        )}
                     </Text>
                     <div className={styles.artists}>
-                        {artists.map((artist, index) => (
-                            <span key={artist.id}>
-                                <Text
-                                    component={Link}
-                                    isLink
-                                    isMuted
-                                    isNoSelect
-                                    size="sm"
-                                    state={{ item: artist }}
-                                    to={artist.path}
-                                >
-                                    {artist.name}
-                                </Text>
-                                {index < artists.length - 1 && ', '}
-                            </span>
-                        ))}
+                        <JoinedArtists
+                            artistName={item.artistName}
+                            artists={item.artists}
+                            linkProps={{ fw: 400, isMuted: true }}
+                            rootTextProps={{ fw: 400, isMuted: true, size: 'sm' }}
+                        />
                     </div>
                 </div>
             </TableColumnContainer>
         );
     }
 
-    if ((props.data[props.rowIndex] as unknown as Folder)?._itemType === LibraryItem.FOLDER) {
+    if ((rowItem as unknown as Folder)?._itemType === LibraryItem.FOLDER) {
         const rowHeight = props.getRowHeight(props.rowIndex, props);
-        const path = getTitlePath(props.itemType, (props.data[props.rowIndex] as any).id as string);
+        const path = getTitlePath(props.itemType, (rowItem as any).id as string);
 
-        const item = props.data[props.rowIndex] as any;
+        const item = rowItem as any;
         const textStyles = isActive ? { color: 'var(--theme-colors-primary)' } : {};
 
         const titleLinkProps = path
@@ -348,7 +357,7 @@ export const QueueSongTitleCombinedColumn = (props: ItemTableListInnerColumn) =>
               }
             : {};
 
-        const title = (props.data[props.rowIndex] as unknown as Folder)?.name;
+        const title = (rowItem as unknown as Folder)?.name;
 
         return (
             <TableColumnContainer
@@ -377,7 +386,7 @@ export const QueueSongTitleCombinedColumn = (props: ItemTableListInnerColumn) =>
     return <ColumnSkeletonVariable {...props} />;
 };
 
-export const TitleCombinedColumn = (props: ItemTableListInnerColumn) => {
+const TitleCombinedColumnBase = (props: ItemTableListInnerColumn) => {
     const { itemType } = props;
 
     switch (itemType) {
@@ -390,3 +399,5 @@ export const TitleCombinedColumn = (props: ItemTableListInnerColumn) => {
             return <DefaultTitleCombinedColumn {...props} />;
     }
 };
+
+export const TitleCombinedColumn = TitleCombinedColumnBase;

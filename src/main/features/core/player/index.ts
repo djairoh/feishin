@@ -116,11 +116,15 @@ const createMpv = async (data: {
 
     mpv.on('status', (status) => {
         if (status.property === 'playlist-pos') {
+            // mpv uses playlist-pos = -1 when nothing is playing (ended, cleared, load failure, etc).
             if (status.value === -1) {
                 mpv?.pause();
+                return;
             }
 
-            if (status.value !== 0) {
+            // In our 2-item queue model, playlist-pos should normally be 0.
+            // When mpv auto-advances to the next track it becomes > 0 (typically 1).
+            if (typeof status.value === 'number' && status.value > 0) {
                 getMainWindow()?.webContents.send('renderer-player-auto-next');
             }
         }
@@ -521,6 +525,63 @@ ipcMain.handle(
         } catch (err: any | NodeMpvError) {
             mpvLog({ action: `Failed to get stream metadata` }, err);
             return null;
+        }
+    },
+);
+
+ipcMain.handle(
+    'player-get-audio-devices',
+    async (): Promise<{ label: string; value: string }[]> => {
+        try {
+            const instance = getMpvInstance();
+            let tempInstance: MpvAPI | null = null;
+            let mpvToUse: MpvAPI | null = null;
+
+            if (instance && instance.isRunning()) {
+                mpvToUse = instance;
+            } else {
+                try {
+                    tempInstance = await createMpv({});
+                    mpvToUse = tempInstance;
+                } catch (err: any | NodeMpvError) {
+                    mpvLog(
+                        { action: 'Failed to create temporary MPV instance for audio device list' },
+                        err,
+                    );
+                    return [];
+                }
+            }
+
+            try {
+                const deviceList = await mpvToUse.getProperty('audio-device-list');
+
+                if (!deviceList || !Array.isArray(deviceList)) {
+                    return [];
+                }
+
+                const devices = deviceList.map((device: any) => {
+                    const name = device.name || device.description || 'Unknown Device';
+                    const description = device.description || '';
+                    const label = description ? `${name} (${description})` : name;
+                    return {
+                        label,
+                        value: name,
+                    };
+                });
+
+                return devices;
+            } finally {
+                if (tempInstance && tempInstance !== instance) {
+                    try {
+                        await quit(tempInstance);
+                    } catch {
+                        // Ignore
+                    }
+                }
+            }
+        } catch (err: any | NodeMpvError) {
+            mpvLog({ action: 'Failed to get audio devices' }, err);
+            return [];
         }
     },
 );

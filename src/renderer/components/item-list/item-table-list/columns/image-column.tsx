@@ -19,12 +19,16 @@ import { Skeleton } from '/@/shared/components/skeleton/skeleton';
 import { Folder, LibraryItem } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
 
-export const ImageColumn = (props: ItemTableListInnerColumn) => {
-    const row: string | undefined = (props.data as (any | undefined)[])[props.rowIndex]?.id;
-    const item = props.data[props.rowIndex] as any;
+const ImageColumnBase = (props: ItemTableListInnerColumn) => {
+    const rowItem = props.getRowItem?.(props.rowIndex) ?? (props.data as any[])[props.rowIndex];
+    const row: string | undefined = rowItem?.id;
+    const item = rowItem as any;
     const playButtonBehavior = usePlayButtonBehavior();
     const internalState = (props as any).internalState;
     const [isHovered, setIsHovered] = useState(false);
+
+    const isFolder = (rowItem as unknown as Folder)?._itemType === LibraryItem.FOLDER;
+    const shouldShowFolderIcon = isFolder && !item?.imageId && !item?.imageUrl;
 
     const handlePlay = (playType: Play, event: React.MouseEvent<HTMLButtonElement>) => {
         if (!item) {
@@ -50,6 +54,7 @@ export const ImageColumn = (props: ItemTableListInnerColumn) => {
                 itemType: props.itemType,
                 meta: {
                     playType,
+                    singleSongOnly: true,
                 },
             });
             return;
@@ -80,12 +85,17 @@ export const ImageColumn = (props: ItemTableListInnerColumn) => {
                 >
                     <ItemImage
                         containerClassName={clsx({
+                            [styles.compactImageContainer]: props.size === 'compact',
                             [styles.imageContainerWithAspectRatio]:
                                 props.size === 'default' || props.size === 'large',
                         })}
-                        id={item?.id}
+                        enableDebounce={true}
+                        enableViewport={false}
+                        explicitStatus={item?.explicitStatus}
+                        id={item?.imageId}
                         itemType={item?._itemType}
                         src={item?.imageUrl}
+                        type="table"
                     />
                     {isHovered && (
                         <div
@@ -112,7 +122,7 @@ export const ImageColumn = (props: ItemTableListInnerColumn) => {
         );
     }
 
-    if ((props.data[props.rowIndex] as unknown as Folder)?._itemType === LibraryItem.FOLDER) {
+    if (shouldShowFolderIcon) {
         return (
             <TableColumnContainer {...props}>
                 <Icon className={styles.folderIcon} icon="folder" size="2xl" />
@@ -125,6 +135,8 @@ export const ImageColumn = (props: ItemTableListInnerColumn) => {
             <div
                 className={clsx(styles.imageContainer, {
                     [styles.compactImageContainer]: props.size === 'compact',
+                    [styles.skeletonWithAspectRatio]:
+                        props.size === 'default' || props.size === 'large',
                 })}
             >
                 <Skeleton containerClassName={styles.skeleton} />
@@ -132,3 +144,5 @@ export const ImageColumn = (props: ItemTableListInnerColumn) => {
         </TableColumnContainer>
     );
 };
+
+export const ImageColumn = ImageColumnBase;

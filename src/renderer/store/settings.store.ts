@@ -1,7 +1,11 @@
 import isElectron from 'is-electron';
+import cloneDeep from 'lodash/cloneDeep';
+import mergeWith from 'lodash/mergeWith';
+import { nanoid } from 'nanoid';
+import { useMemo } from 'react';
 import { generatePath } from 'react-router';
 import { z } from 'zod';
-import { devtools, persist } from 'zustand/middleware';
+import { devtools, persist, subscribeWithSelector } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { shallow } from 'zustand/shallow';
 import { createWithEqualityFn } from 'zustand/traditional';
@@ -17,13 +21,15 @@ import {
     PLAYLIST_TABLE_COLUMNS,
     SONG_TABLE_COLUMNS,
 } from '/@/renderer/components/item-list/item-table-list/default-columns';
+import { audiomotionanalyzerPresets } from '/@/renderer/features/visualizer/components/audiomotionanalyzer/presets';
 import { AppRoute } from '/@/renderer/router/routes';
+import { getEnvSettingsOverrides } from '/@/renderer/store/env-settings-overrides';
 import { mergeOverridingColumns } from '/@/renderer/store/utils';
 import { FontValueSchema } from '/@/renderer/types/fonts';
 import { randomString } from '/@/renderer/utils';
 import { sanitizeCss } from '/@/renderer/utils/sanitize';
 import { AppTheme } from '/@/shared/themes/app-theme-types';
-import { LibraryItem, LyricSource } from '/@/shared/types/domain-types';
+import { LibraryItem, LyricSource, SavedCollection } from '/@/shared/types/domain-types';
 import {
     FontType,
     ItemListKey,
@@ -41,6 +47,26 @@ type DeepPartial<T> = {
     [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
 };
 
+const deepMergeIntoState = <T extends Record<string, any>>(
+    state: T,
+    updates: DeepPartial<T>,
+): void => {
+    // Skip 'actions' property
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { actions, ...updatesWithoutActions } = updates as any;
+
+    // Use mergeWith to replace arrays instead of merging them by index
+    mergeWith(state, updatesWithoutActions, (_objValue, srcValue) => {
+        // If source value is an array, replace the entire array instead of merging
+        if (Array.isArray(srcValue)) {
+            return srcValue;
+        }
+
+        // Default merge behavior
+        return undefined;
+    });
+};
+
 const HomeItemSchema = z.enum([
     'genres',
     'mostPlayed',
@@ -50,12 +76,48 @@ const HomeItemSchema = z.enum([
     'recentlyReleased',
 ]);
 
+const PlayerItemSchema = z.enum([
+    'bit_depth',
+    'bit_rate',
+    'bpm',
+    'disc_number',
+    'sample_rate',
+    'track_number',
+    'codec',
+    'release_year',
+    'release_type',
+    'release_date',
+    'genres',
+]);
+
 const ArtistItemSchema = z.enum([
     'biography',
     'compilations',
+    'favoriteSongs',
     'recentAlbums',
     'similarArtists',
     'topSongs',
+]);
+
+const ArtistReleaseTypeItemSchema = z.enum([
+    'releaseTypeAlbum',
+    'releaseTypeEp',
+    'releaseTypeSingle',
+    'releaseTypeBroadcast',
+    'releaseTypeOther',
+    'releaseTypeCompilation',
+    'appearsOn',
+    'releaseTypeAudioDrama',
+    'releaseTypeAudiobook',
+    'releaseTypeDemo',
+    'releaseTypeDjMix',
+    'releaseTypeFieldRecording',
+    'releaseTypeInterview',
+    'releaseTypeLive',
+    'releaseTypeMixtapeStreet',
+    'releaseTypeRemix',
+    'releaseTypeSoundtrack',
+    'releaseTypeSpokenWord',
 ]);
 
 const BindingActionsSchema = z.enum([
@@ -93,6 +155,11 @@ const BindingActionsSchema = z.enum([
     'volumeUp',
     'zoomIn',
     'zoomOut',
+    'listPlayDefault',
+    'listPlayNow',
+    'listPlayNext',
+    'listPlayLast',
+    'listNavigateToPage',
 ]);
 
 const DiscordDisplayTypeSchema = z.enum(['artist', 'feishin', 'song']);
@@ -101,9 +168,18 @@ const DiscordLinkTypeSchema = z.enum(['last_fm', 'musicbrainz', 'musicbrainz_las
 
 const GenreTargetSchema = z.enum(['album', 'track']);
 
+const PlaylistTargetSchema = z.enum(['album', 'track']);
+
 const SideQueueTypeSchema = z.enum(['sideDrawerQueue', 'sideQueue']);
 
 const SidebarPanelTypeSchema = z.enum(['queue', 'lyrics', 'visualizer']);
+
+const CollectionSchema = z.object({
+    filterQueryString: z.string(),
+    id: z.string(),
+    name: z.string(),
+    type: z.enum([LibraryItem.ALBUM, LibraryItem.SONG]),
+});
 
 const SidebarItemTypeSchema = z.object({
     disabled: z.boolean(),
@@ -141,13 +217,25 @@ const ItemTableListPropsSchema = z.object({
     autoFitColumns: z.boolean(),
     columns: z.array(ItemTableListColumnConfigSchema),
     enableAlternateRowColors: z.boolean(),
+    enableHeader: z.boolean(),
     enableHorizontalBorders: z.boolean(),
     enableRowHoverHighlight: z.boolean(),
     enableVerticalBorders: z.boolean(),
-    size: z.enum(['compact', 'default']),
+    size: z.enum(['compact', 'default', 'large']),
+});
+
+const ItemDetailListPropsSchema = z.object({
+    columns: z.array(ItemTableListColumnConfigSchema),
+    enableAlternateRowColors: z.boolean(),
+    enableHeader: z.boolean(),
+    enableHorizontalBorders: z.boolean(),
+    enableRowHoverHighlight: z.boolean(),
+    enableVerticalBorders: z.boolean(),
+    size: z.enum(['compact', 'default', 'large']),
 });
 
 const ItemListConfigSchema = z.object({
+    detail: ItemDetailListPropsSchema.optional(),
     display: z.nativeEnum(ListDisplayType),
     grid: z.object({
         itemGap: z.enum(['lg', 'md', 'sm', 'xl', 'xs']),
@@ -191,6 +279,7 @@ const DiscordSettingsSchema = z.object({
     showAsListening: z.boolean(),
     showPaused: z.boolean(),
     showServerImage: z.boolean(),
+    showStateIcon: z.boolean(),
 });
 
 const FontSettingsSchema = z.object({
@@ -292,6 +381,7 @@ const AudioMotionAnalyzerSettingsSchema = z.object({
     peakLine: z.boolean(),
     presets: z.array(
         z.object({
+            id: z.string(),
             name: z.string(),
             value: z.any(),
         }),
@@ -335,6 +425,16 @@ const VisualizerSettingsSchema = z.object({
     type: z.enum(['audiomotionanalyzer', 'butterchurn']),
 });
 
+export enum HomeFeatureStyle {
+    MULTIPLE = 'multiple',
+    SINGLE = 'single',
+}
+
+const AutoSaveSchema = z.object({
+    count: z.number().min(0),
+    enabled: z.boolean(),
+});
+
 export const GeneralSettingsSchema = z.object({
     accent: z
         .string()
@@ -350,14 +450,20 @@ export const GeneralSettingsSchema = z.object({
     artistBackgroundBlur: z.number(),
     artistItems: z.array(SortableItemSchema(ArtistItemSchema)),
     artistRadioCount: z.number(),
+    artistReleaseTypeItems: z.array(SortableItemSchema(ArtistReleaseTypeItemSchema)),
+    autoSave: AutoSaveSchema,
+    blurExplicitImages: z.boolean(),
     buttonSize: z.number(),
+    collections: z.array(CollectionSchema),
     combinedLyricsAndVisualizer: z.boolean(),
     disabledContextMenu: z.record(z.string(), z.boolean()),
+    enableGridMultiSelect: z.boolean(),
     externalLinks: z.boolean(),
     followCurrentSong: z.boolean(),
     followSystemTheme: z.boolean(),
     genreTarget: GenreTargetSchema,
     homeFeature: z.boolean(),
+    homeFeatureStyle: z.nativeEnum(HomeFeatureStyle),
     homeItems: z.array(SortableItemSchema(HomeItemSchema)),
     imageRes: z.object({
         fullScreenPlayer: z.number(),
@@ -372,9 +478,14 @@ export const GeneralSettingsSchema = z.object({
     musicBrainz: z.boolean(),
     nativeAspectRatio: z.boolean(),
     passwordStore: z.string().optional(),
+    pathReplace: z.string(),
+    pathReplaceWith: z.string(),
     playButtonBehavior: z.nativeEnum(Play),
     playerbarOpenDrawer: z.boolean(),
     playerbarSlider: PlayerbarSliderSchema,
+    playerItems: z.array(SortableItemSchema(PlayerItemSchema)),
+    playlistTarget: PlaylistTargetSchema,
+    primaryShade: z.number().min(0).max(9),
     resume: z.boolean(),
     showLyricsInSidebar: z.boolean(),
     showRatings: z.boolean(),
@@ -384,12 +495,15 @@ export const GeneralSettingsSchema = z.object({
     sidebarItems: z.array(SidebarItemTypeSchema),
     sidebarPanelOrder: z.array(SidebarPanelTypeSchema),
     sidebarPlaylistList: z.boolean(),
+    sidebarPlaylistListFilterRegex: z.string(),
+    sidebarPlaylistSorting: z.boolean(),
     sideQueueType: SideQueueTypeSchema,
     skipButtons: SkipButtonsSchema,
     theme: z.nativeEnum(AppTheme),
     themeDark: z.nativeEnum(AppTheme),
     themeLight: z.nativeEnum(AppTheme),
     useThemeAccentColor: z.boolean(),
+    useThemePrimaryShade: z.boolean(),
     volumeWheelStep: z.number(),
     volumeWidth: z.number(),
     zoomFactor: z.number(),
@@ -492,6 +606,7 @@ const PlaybackSettingsSchema = z.object({
     audioFadeOnStatusChange: z.boolean(),
     filters: z.array(PlayerFilterSchema),
     mediaSession: z.boolean(),
+    mpvAudioDeviceId: z.string().nullable().optional(),
     mpvExtraParameters: z.array(z.string()),
     mpvProperties: MpvSettingsSchema,
     preservePitch: z.boolean(),
@@ -513,7 +628,7 @@ const WindowSettingsSchema = z.object({
     exitToTray: z.boolean(),
     minimizeToTray: z.boolean(),
     preventSleepOnPlayback: z.boolean(),
-    releaseChannel: z.enum(['beta', 'latest']),
+    releaseChannel: z.enum(['alpha', 'beta', 'latest']),
     startMinimized: z.boolean(),
     tray: z.boolean(),
     windowBarStyle: z.nativeEnum(Platform),
@@ -582,9 +697,31 @@ export const SettingsStateSchema = ValidationSettingsStateSchema.merge(
 
 export enum ArtistItem {
     BIOGRAPHY = 'biography',
+    FAVORITE_SONGS = 'favoriteSongs',
     RECENT_ALBUMS = 'recentAlbums',
     SIMILAR_ARTISTS = 'similarArtists',
     TOP_SONGS = 'topSongs',
+}
+
+export enum ArtistReleaseTypeItem {
+    APPEARS_ON = 'appearsOn',
+    RELEASE_TYPE_ALBUM = 'releaseTypeAlbum',
+    RELEASE_TYPE_AUDIO_DRAMA = 'releaseTypeAudioDrama',
+    RELEASE_TYPE_AUDIOBOOK = 'releaseTypeAudiobook',
+    RELEASE_TYPE_BROADCAST = 'releaseTypeBroadcast',
+    RELEASE_TYPE_COMPILATION = 'releaseTypeCompilation',
+    RELEASE_TYPE_DEMO = 'releaseTypeDemo',
+    RELEASE_TYPE_DJ_MIX = 'releaseTypeDjMix',
+    RELEASE_TYPE_EP = 'releaseTypeEp',
+    RELEASE_TYPE_FIELD_RECORDING = 'releaseTypeFieldRecording',
+    RELEASE_TYPE_INTERVIEW = 'releaseTypeInterview',
+    RELEASE_TYPE_LIVE = 'releaseTypeLive',
+    RELEASE_TYPE_MIXTAPE_STREET = 'releaseTypeMixtapeStreet',
+    RELEASE_TYPE_OTHER = 'releaseTypeOther',
+    RELEASE_TYPE_REMIX = 'releaseTypeRemix',
+    RELEASE_TYPE_SINGLE = 'releaseTypeSingle',
+    RELEASE_TYPE_SOUNDTRACK = 'releaseTypeSoundtrack',
+    RELEASE_TYPE_SPOKENWORD = 'releaseTypeSpokenWord',
 }
 
 export enum BarAlign {
@@ -603,6 +740,11 @@ export enum BindingActions {
     FAVORITE_PREVIOUS_REMOVE = 'favoritePreviousRemove',
     FAVORITE_PREVIOUS_TOGGLE = 'favoritePreviousToggle',
     GLOBAL_SEARCH = 'globalSearch',
+    LIST_NAVIGATE_TO_PAGE = 'listNavigateToPage',
+    LIST_PLAY_DEFAULT = 'listPlayDefault',
+    LIST_PLAY_LAST = 'listPlayLast',
+    LIST_PLAY_NEXT = 'listPlayNext',
+    LIST_PLAY_NOW = 'listPlayNow',
     LOCAL_SEARCH = 'localSearch',
     MUTE = 'volumeMute',
     NAVIGATE_HOME = 'navigateHome',
@@ -662,6 +804,42 @@ export enum PlayerbarSliderType {
     WAVEFORM = 'waveform',
 }
 
+export enum PlayerItem {
+    BIT_DEPTH = 'bit_depth',
+    BIT_RATE = 'bit_rate',
+    BPM = 'bpm',
+    CODEC = 'codec',
+    DISC_NUMBER = 'disc_number',
+    GENRES = 'genres',
+    RELEASE_DATE = 'release_date',
+    RELEASE_TYPE = 'release_type',
+    RELEASE_YEAR = 'release_year',
+    SAMPLE_RATE = 'sample_rate',
+    TRACK_NUMBER = 'track_number',
+}
+
+export enum PlaylistTarget {
+    ALBUM = 'album',
+    TRACK = 'track',
+}
+
+export enum SidebarItem {
+    ALBUMS = 'Albums',
+    ARTISTS = 'Artists',
+    ARTISTS_ALL = 'Artists-all',
+    COLLECTIONS = 'Collections',
+    FAVORITES = 'Favorites',
+    FOLDERS = 'Folders',
+    GENRES = 'Genres',
+    HOME = 'Home',
+    NOW_PLAYING = 'Now Playing',
+    PLAYLISTS = 'Playlists',
+    RADIO = 'Radio',
+    SEARCH = 'Search',
+    SETTINGS = 'Settings',
+    TRACKS = 'Tracks',
+}
+
 export type DataGridProps = {
     itemGap: 'lg' | 'md' | 'sm' | 'xl' | 'xs';
     itemsPerRow: number;
@@ -671,7 +849,9 @@ export type DataGridProps = {
 };
 
 export type DataTableProps = z.infer<typeof ItemTableListPropsSchema>;
+export type ItemDetailListProps = z.infer<typeof ItemDetailListPropsSchema>;
 export type ItemListSettings = {
+    detail?: ItemDetailListProps;
     display: ListDisplayType;
     grid: DataGridProps;
     itemsPerPage: number;
@@ -687,19 +867,25 @@ export type PlayerFilterOperator = z.infer<typeof PlayerFilterOperatorSchema>;
 
 export interface SettingsSlice extends z.infer<typeof SettingsStateSchema> {
     actions: {
+        addCollection: (collection: SavedCollection) => void;
+        removeCollection: (id: string) => void;
         reset: () => void;
         resetSampleRate: () => void;
         setArtistItems: (item: SortableItem<ArtistItem>[]) => void;
+        setArtistReleaseTypeItems: (item: SortableItem<ArtistReleaseTypeItem>[]) => void;
         setGenreBehavior: (target: GenreTarget) => void;
         setHomeItems: (item: SortableItem<HomeItem>[]) => void;
         setList: (type: ItemListKey, data: DeepPartial<ItemListSettings>) => void;
         setPlaybackFilters: (filters: PlayerFilter[]) => void;
-        setSettings: (data: Partial<SettingsState>) => void;
+        setPlayerItems: (items: SortableItem<PlayerItem>[]) => void;
+        setPlaylistBehavior: (target: PlaylistTarget) => void;
+        setSettings: (data: DeepPartial<SettingsState>) => void;
         setSidebarItems: (items: SidebarItemType[]) => void;
         setTable: (type: ItemListKey, data: DataTableProps) => void;
         setTranscodingConfig: (config: TranscodingConfig) => void;
         toggleMediaSession: () => void;
         toggleSidebarCollapseShare: () => void;
+        updateCollection: (id: string, updates: Partial<Omit<SavedCollection, 'id'>>) => void;
     };
 }
 export interface SettingsState extends z.infer<typeof SettingsStateSchema> {}
@@ -707,7 +893,7 @@ export type SidebarItemType = z.infer<typeof SidebarItemTypeSchema>;
 
 export type SideQueueType = z.infer<typeof SideQueueTypeSchema>;
 
-export type SortableItem<T> = {
+export type SortableItem<T extends string> = {
     disabled: boolean;
     id: T;
 };
@@ -715,6 +901,53 @@ export type SortableItem<T> = {
 export type TranscodingConfig = z.infer<typeof TranscodingConfigSchema>;
 
 export type VersionedSettings = SettingsState & { version: number };
+
+export const playerItems: SortableItem<PlayerItem>[] = [
+    {
+        disabled: true,
+        id: PlayerItem.BIT_DEPTH,
+    },
+    {
+        disabled: true,
+        id: PlayerItem.BIT_RATE,
+    },
+    {
+        disabled: true,
+        id: PlayerItem.BPM,
+    },
+    {
+        disabled: false,
+        id: PlayerItem.CODEC,
+    },
+    {
+        disabled: true,
+        id: PlayerItem.DISC_NUMBER,
+    },
+    {
+        disabled: true,
+        id: PlayerItem.GENRES,
+    },
+    {
+        disabled: true,
+        id: PlayerItem.RELEASE_DATE,
+    },
+    {
+        disabled: true,
+        id: PlayerItem.RELEASE_TYPE,
+    },
+    {
+        disabled: false,
+        id: PlayerItem.RELEASE_YEAR,
+    },
+    {
+        disabled: true,
+        id: PlayerItem.SAMPLE_RATE,
+    },
+    {
+        disabled: true,
+        id: PlayerItem.TRACK_NUMBER,
+    },
+];
 
 export const sidebarItems: SidebarItemType[] = [
     {
@@ -780,6 +1013,12 @@ export const sidebarItems: SidebarItemType[] = [
     },
     {
         disabled: false,
+        id: 'Collections',
+        label: i18n.t('page.sidebar.collections'),
+        route: '',
+    },
+    {
+        disabled: false,
         id: 'Radio',
         label: i18n.t('page.sidebar.radio'),
         route: AppRoute.RADIO,
@@ -798,6 +1037,11 @@ const homeItems = Object.values(HomeItem).map((item) => ({
 }));
 
 const artistItems = Object.values(ArtistItem).map((item) => ({
+    disabled: false,
+    id: item,
+}));
+
+const artistReleaseTypeItems = Object.values(ArtistReleaseTypeItem).map((item) => ({
     disabled: false,
     id: item,
 }));
@@ -839,9 +1083,10 @@ const initialState: SettingsState = {
         showAsListening: false,
         showPaused: true,
         showServerImage: false,
+        showStateIcon: true,
     },
     font: {
-        builtIn: 'Poppins',
+        builtIn: 'Inter',
         custom: null,
         system: null,
         type: FontType.BUILT_IN,
@@ -854,14 +1099,23 @@ const initialState: SettingsState = {
         artistBackgroundBlur: 3,
         artistItems,
         artistRadioCount: 20,
+        artistReleaseTypeItems,
+        autoSave: {
+            count: 10,
+            enabled: false,
+        },
+        blurExplicitImages: false,
         buttonSize: 15,
+        collections: [],
         combinedLyricsAndVisualizer: false,
         disabledContextMenu: {},
+        enableGridMultiSelect: false,
         externalLinks: true,
         followCurrentSong: true,
         followSystemTheme: false,
         genreTarget: GenreTarget.TRACK,
         homeFeature: true,
+        homeFeatureStyle: HomeFeatureStyle.SINGLE,
         homeItems,
         imageRes: {
             fullScreenPlayer: 0,
@@ -876,6 +1130,8 @@ const initialState: SettingsState = {
         musicBrainz: true,
         nativeAspectRatio: false,
         passwordStore: undefined,
+        pathReplace: '',
+        pathReplaceWith: '',
         playButtonBehavior: Play.NOW,
         playerbarOpenDrawer: false,
         playerbarSlider: {
@@ -885,6 +1141,9 @@ const initialState: SettingsState = {
             barWidth: 2,
             type: PlayerbarSliderType.SLIDER,
         },
+        playerItems,
+        playlistTarget: PlaylistTarget.TRACK,
+        primaryShade: 6,
         resume: true,
         showLyricsInSidebar: true,
         showRatings: true,
@@ -894,6 +1153,8 @@ const initialState: SettingsState = {
         sidebarItems,
         sidebarPanelOrder: ['queue', 'lyrics', 'visualizer'],
         sidebarPlaylistList: true,
+        sidebarPlaylistListFilterRegex: '',
+        sidebarPlaylistSorting: false,
         sideQueueType: 'sideQueue',
         skipButtons: {
             enabled: false,
@@ -904,6 +1165,7 @@ const initialState: SettingsState = {
         themeDark: AppTheme.DEFAULT_DARK,
         themeLight: AppTheme.DEFAULT_LIGHT,
         useThemeAccentColor: false,
+        useThemePrimaryShade: true,
         volumeWheelStep: 5,
         volumeWidth: 70,
         zoomFactor: 100,
@@ -919,6 +1181,11 @@ const initialState: SettingsState = {
             favoritePreviousRemove: { allowGlobal: true, hotkey: '', isGlobal: false },
             favoritePreviousToggle: { allowGlobal: true, hotkey: '', isGlobal: false },
             globalSearch: { allowGlobal: false, hotkey: 'mod+k', isGlobal: false },
+            listNavigateToPage: { allowGlobal: false, hotkey: 'mod+g', isGlobal: false },
+            listPlayDefault: { allowGlobal: false, hotkey: 'enter', isGlobal: false },
+            listPlayLast: { allowGlobal: false, hotkey: '', isGlobal: false },
+            listPlayNext: { allowGlobal: false, hotkey: '', isGlobal: false },
+            listPlayNow: { allowGlobal: false, hotkey: '', isGlobal: false },
             localSearch: { allowGlobal: false, hotkey: 'mod+f', isGlobal: false },
             navigateHome: { allowGlobal: false, hotkey: '', isGlobal: false },
             next: { allowGlobal: true, hotkey: '', isGlobal: false },
@@ -978,6 +1245,7 @@ const initialState: SettingsState = {
                     ],
                 }),
                 enableAlternateRowColors: false,
+                enableHeader: true,
                 enableHorizontalBorders: false,
                 enableRowHoverHighlight: true,
                 enableVerticalBorders: false,
@@ -1006,13 +1274,40 @@ const initialState: SettingsState = {
                     width: column.width,
                 })),
                 enableAlternateRowColors: false,
+                enableHeader: true,
                 enableHorizontalBorders: false,
                 enableRowHoverHighlight: true,
                 enableVerticalBorders: false,
                 size: 'default',
             },
         },
-        [LibraryItem.ALBUM]: {
+        [ItemListKey.PLAYLIST_ALBUM]: {
+            detail: {
+                columns: pickTableColumns({
+                    autoSizeColumns: [],
+                    columns: SONG_TABLE_COLUMNS,
+                    columnWidths: {
+                        [TableColumn.ACTIONS]: 60,
+                        [TableColumn.DURATION]: 100,
+                        [TableColumn.TITLE]: 400,
+                        [TableColumn.TRACK_NUMBER]: 50,
+                        [TableColumn.USER_FAVORITE]: 60,
+                    },
+                    enabledColumns: [
+                        TableColumn.TRACK_NUMBER,
+                        TableColumn.TITLE,
+                        TableColumn.DURATION,
+                        TableColumn.USER_FAVORITE,
+                        TableColumn.ACTIONS,
+                    ],
+                }),
+                enableAlternateRowColors: false,
+                enableHeader: true,
+                enableHorizontalBorders: false,
+                enableRowHoverHighlight: true,
+                enableVerticalBorders: false,
+                size: 'compact',
+            },
             display: ListDisplayType.GRID,
             grid: {
                 itemGap: 'sm',
@@ -1056,6 +1351,84 @@ const initialState: SettingsState = {
                     width: column.width,
                 })),
                 enableAlternateRowColors: false,
+                enableHeader: true,
+                enableHorizontalBorders: false,
+                enableRowHoverHighlight: true,
+                enableVerticalBorders: false,
+                size: 'default',
+            },
+        },
+        [LibraryItem.ALBUM]: {
+            detail: {
+                columns: pickTableColumns({
+                    autoSizeColumns: [],
+                    columns: SONG_TABLE_COLUMNS,
+                    columnWidths: {
+                        [TableColumn.ACTIONS]: 60,
+                        [TableColumn.DURATION]: 100,
+                        [TableColumn.TITLE]: 400,
+                        [TableColumn.TRACK_NUMBER]: 50,
+                        [TableColumn.USER_FAVORITE]: 60,
+                    },
+                    enabledColumns: [
+                        TableColumn.TRACK_NUMBER,
+                        TableColumn.TITLE,
+                        TableColumn.DURATION,
+                        TableColumn.USER_FAVORITE,
+                        TableColumn.ACTIONS,
+                    ],
+                }),
+                enableAlternateRowColors: false,
+                enableHeader: true,
+                enableHorizontalBorders: false,
+                enableRowHoverHighlight: true,
+                enableVerticalBorders: false,
+                size: 'compact',
+            },
+            display: ListDisplayType.GRID,
+            grid: {
+                itemGap: 'sm',
+                itemsPerRow: 6,
+                itemsPerRowEnabled: false,
+                rows: pickGridRows({
+                    alignLeftColumns: [
+                        TableColumn.TITLE,
+                        TableColumn.ALBUM_ARTIST,
+                        TableColumn.YEAR,
+                    ],
+                    columns: ALBUM_TABLE_COLUMNS,
+                    enabledColumns: [TableColumn.TITLE, TableColumn.ALBUM_ARTIST, TableColumn.YEAR],
+                    pickColumns: [
+                        TableColumn.TITLE,
+                        TableColumn.DURATION,
+                        TableColumn.ALBUM_ARTIST,
+                        TableColumn.BIT_RATE,
+                        TableColumn.BPM,
+                        TableColumn.DATE_ADDED,
+                        TableColumn.GENRE,
+                        TableColumn.PLAY_COUNT,
+                        TableColumn.SONG_COUNT,
+                        TableColumn.RELEASE_DATE,
+                        TableColumn.LAST_PLAYED,
+                        TableColumn.YEAR,
+                    ],
+                }),
+                size: 'default',
+            },
+            itemsPerPage: 100,
+            pagination: ListPaginationType.INFINITE,
+            table: {
+                autoFitColumns: true,
+                columns: ALBUM_TABLE_COLUMNS.map((column) => ({
+                    align: column.align,
+                    autoSize: column.autoSize,
+                    id: column.value,
+                    isEnabled: column.isEnabled,
+                    pinned: column.pinned,
+                    width: column.width,
+                })),
+                enableAlternateRowColors: false,
+                enableHeader: true,
                 enableHorizontalBorders: false,
                 enableRowHoverHighlight: true,
                 enableVerticalBorders: false,
@@ -1096,6 +1469,7 @@ const initialState: SettingsState = {
                     ],
                 }),
                 enableAlternateRowColors: false,
+                enableHeader: true,
                 enableHorizontalBorders: false,
                 enableRowHoverHighlight: true,
                 enableVerticalBorders: false,
@@ -1141,6 +1515,7 @@ const initialState: SettingsState = {
                     ],
                 }),
                 enableAlternateRowColors: false,
+                enableHeader: true,
                 enableHorizontalBorders: false,
                 enableRowHoverHighlight: true,
                 enableVerticalBorders: false,
@@ -1186,6 +1561,7 @@ const initialState: SettingsState = {
                     width: column.width,
                 })),
                 enableAlternateRowColors: false,
+                enableHeader: true,
                 enableHorizontalBorders: false,
                 enableRowHoverHighlight: true,
                 enableVerticalBorders: false,
@@ -1221,6 +1597,7 @@ const initialState: SettingsState = {
                     ],
                 }),
                 enableAlternateRowColors: false,
+                enableHeader: true,
                 enableHorizontalBorders: false,
                 enableRowHoverHighlight: true,
                 enableVerticalBorders: false,
@@ -1233,7 +1610,25 @@ const initialState: SettingsState = {
                 itemGap: 'sm',
                 itemsPerRow: 6,
                 itemsPerRowEnabled: false,
-                rows: [],
+                rows: pickGridRows({
+                    alignLeftColumns: [TableColumn.TITLE, TableColumn.ARTIST],
+                    columns: PLAYLIST_SONG_TABLE_COLUMNS,
+                    enabledColumns: [TableColumn.TITLE, TableColumn.ARTIST],
+                    pickColumns: [
+                        TableColumn.TITLE,
+                        TableColumn.ARTIST,
+                        TableColumn.DURATION,
+                        TableColumn.YEAR,
+                        TableColumn.BIT_RATE,
+                        TableColumn.BPM,
+                        TableColumn.CODEC,
+                        TableColumn.DATE_ADDED,
+                        TableColumn.GENRE,
+                        TableColumn.LAST_PLAYED,
+                        TableColumn.RELEASE_DATE,
+                        TableColumn.TRACK_NUMBER,
+                    ],
+                }),
                 size: 'default',
             },
             itemsPerPage: 100,
@@ -1249,6 +1644,7 @@ const initialState: SettingsState = {
                     width: column.width,
                 })),
                 enableAlternateRowColors: false,
+                enableHeader: true,
                 enableHorizontalBorders: false,
                 enableRowHoverHighlight: true,
                 enableVerticalBorders: false,
@@ -1277,6 +1673,7 @@ const initialState: SettingsState = {
                     width: column.width,
                 })),
                 enableAlternateRowColors: false,
+                enableHeader: true,
                 enableHorizontalBorders: false,
                 enableRowHoverHighlight: true,
                 enableVerticalBorders: false,
@@ -1323,6 +1720,7 @@ const initialState: SettingsState = {
                     width: column.width,
                 })),
                 enableAlternateRowColors: false,
+                enableHeader: true,
                 enableHorizontalBorders: false,
                 enableRowHoverHighlight: true,
                 enableVerticalBorders: false,
@@ -1353,6 +1751,7 @@ const initialState: SettingsState = {
                     ],
                 }),
                 enableAlternateRowColors: false,
+                enableHeader: true,
                 enableHorizontalBorders: false,
                 enableRowHoverHighlight: true,
                 enableVerticalBorders: false,
@@ -1388,6 +1787,7 @@ const initialState: SettingsState = {
         audioFadeOnStatusChange: true,
         filters: [],
         mediaSession: false,
+        mpvAudioDeviceId: undefined,
         mpvExtraParameters: [],
         mpvProperties: {
             audioExclusiveMode: 'no',
@@ -1426,50 +1826,50 @@ const initialState: SettingsState = {
         audiomotionanalyzer: {
             alphaBars: false,
             ansiBands: false,
-            barSpace: 0,
+            barSpace: 0.7,
             channelLayout: 'single',
             colorMode: 'gradient',
             customGradients: [],
             fadePeaks: true,
-            fftSize: 8192,
-            fillAlpha: 1,
+            fftSize: 16384,
+            fillAlpha: 0,
             frequencyScale: 'log',
             gradient: 'prism',
             gravity: 11,
-            ledBars: true,
+            ledBars: false,
             linearAmplitude: false,
             linearBoost: 4,
-            lineWidth: 0,
+            lineWidth: 1.9,
             loRes: false,
             lumiBars: false,
             maxDecibels: -25,
             maxFPS: 0,
-            maxFreq: 8000,
+            maxFreq: 22050,
             minDecibels: -85,
             minFreq: 20,
             mirror: 0,
-            mode: 5,
+            mode: 10,
             noteLabels: false,
             opacity: 1,
             outlineBars: false,
             peakFadeTime: 900,
             peakHoldTime: 500,
             peakLine: true,
-            presets: [],
+            presets: audiomotionanalyzerPresets,
             radial: false,
             radialInvert: false,
             radius: 0.7,
-            reflexAlpha: 0.5,
+            reflexAlpha: 0.1,
             reflexBright: 1,
             reflexFit: false,
-            reflexRatio: 0,
+            reflexRatio: 0.5,
             roundBars: false,
             showFPS: false,
             showPeaks: false,
-            showScaleX: true,
+            showScaleX: false,
             showScaleY: false,
-            smoothing: 0.7,
-            spinSpeed: 0.5,
+            smoothing: 0.6,
+            spinSpeed: 0,
             splitGradient: false,
             trueLeds: false,
             volume: 1,
@@ -1501,147 +1901,160 @@ const initialState: SettingsState = {
     },
 };
 
-// Helper function to create a deep clone of initialState
-const getInitialState = (): SettingsState => {
-    const freshHomeItems = Object.values(HomeItem).map((item) => ({
-        disabled: false,
-        id: item,
-    }));
-
-    const freshArtistItems = Object.values(ArtistItem).map((item) => ({
-        disabled: false,
-        id: item,
-    }));
-
-    // Deep clone using JSON to ensure all nested objects/arrays are fresh copies
-    const clonedState = JSON.parse(JSON.stringify(initialState)) as SettingsState;
-
-    // Replace arrays that need fresh references
-    clonedState.general.homeItems = freshHomeItems;
-    clonedState.general.artistItems = freshArtistItems;
-    clonedState.general.sidebarItems = JSON.parse(
-        JSON.stringify(sidebarItems),
-    ) as SidebarItemType[];
-
-    // Regenerate random password for remote settings
-    clonedState.remote.password = randomString(8);
-
-    return clonedState;
-};
+const initialStateWithEnv = mergeWith(
+    cloneDeep(initialState),
+    getEnvSettingsOverrides(),
+) as SettingsState;
 
 export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
     persist(
         devtools(
-            immer((set, get) => ({
-                actions: {
-                    reset: () => {
-                        const freshState = getInitialState();
-                        set((state) => {
-                            // Deep clone the fresh state to ensure all nested objects/arrays are new references
-                            const resetState = JSON.parse(
-                                JSON.stringify(freshState),
-                            ) as SettingsState;
+            subscribeWithSelector(
+                immer((set) => ({
+                    actions: {
+                        addCollection: (collection: SavedCollection) => {
+                            set((state) => {
+                                state.general.collections.push(collection);
+                            });
+                        },
+                        removeCollection: (id: string) => {
+                            set((state) => {
+                                state.general.collections = state.general.collections.filter(
+                                    (c) => c.id !== id,
+                                );
+                            });
+                        },
+                        reset: () => {
+                            localStorage.removeItem('store_settings');
+                            window.location.reload();
+                        },
+                        resetSampleRate: () => {
+                            set((state) => {
+                                state.playback.mpvProperties.audioSampleRateHz = 0;
+                            });
+                        },
+                        setArtistItems: (items) => {
+                            set((state) => {
+                                state.general.artistItems = items;
+                            });
+                        },
+                        setArtistReleaseTypeItems: (
+                            items: SortableItem<ArtistReleaseTypeItem>[],
+                        ) => {
+                            set((state) => {
+                                state.general.artistReleaseTypeItems = items;
+                            });
+                        },
+                        setGenreBehavior: (target: GenreTarget) => {
+                            set((state) => {
+                                state.general.genreTarget = target;
+                            });
+                        },
+                        setHomeItems: (items: SortableItem<HomeItem>[]) => {
+                            set((state) => {
+                                state.general.homeItems = items;
+                            });
+                        },
+                        setList: (type: ItemListKey, data: DeepPartial<ItemListSettings>) => {
+                            set((state) => {
+                                const listState = state.lists[type];
 
-                            // Override playback type for web if not electron
-                            if (!isElectron()) {
-                                resetState.playback.type = PlayerType.WEB;
-                            }
+                                if (listState && data.table) {
+                                    Object.assign(listState.table, data.table);
+                                    delete data.table;
+                                }
 
-                            // Replace all state properties (except actions) with the reset state
-                            state.css = resetState.css;
-                            state.discord = resetState.discord;
-                            state.font = resetState.font;
-                            state.general = resetState.general;
-                            state.hotkeys = resetState.hotkeys;
-                            state.lists = resetState.lists;
-                            state.lyrics = resetState.lyrics;
-                            state.playback = resetState.playback;
-                            state.queryBuilder = resetState.queryBuilder;
-                            state.remote = resetState.remote;
-                            state.tab = resetState.tab;
-                            state.visualizer = resetState.visualizer;
-                            state.window = resetState.window;
-                        });
-                    },
-                    resetSampleRate: () => {
-                        set((state) => {
-                            state.playback.mpvProperties.audioSampleRateHz = 0;
-                        });
-                    },
-                    setArtistItems: (items) => {
-                        set((state) => {
-                            state.general.artistItems = items;
-                        });
-                    },
-                    setGenreBehavior: (target: GenreTarget) => {
-                        set((state) => {
-                            state.general.genreTarget = target;
-                        });
-                    },
-                    setHomeItems: (items: SortableItem<HomeItem>[]) => {
-                        set((state) => {
-                            state.general.homeItems = items;
-                        });
-                    },
-                    setList: (type: ItemListKey, data: DeepPartial<ItemListSettings>) => {
-                        set((state) => {
-                            const listState = state.lists[type];
+                                if (listState && data.detail) {
+                                    if (!listState.detail) {
+                                        const t = listState.table;
+                                        listState.detail = {
+                                            columns: t.columns,
+                                            enableAlternateRowColors: false,
+                                            enableHeader: t.enableHeader,
+                                            enableHorizontalBorders: t.enableHorizontalBorders,
+                                            enableRowHoverHighlight: t.enableRowHoverHighlight,
+                                            enableVerticalBorders: t.enableVerticalBorders,
+                                            size: t.size,
+                                        };
+                                    }
+                                    Object.assign(listState.detail, data.detail);
+                                    delete data.detail;
+                                }
 
-                            if (listState && data.table) {
-                                Object.assign(listState.table, data.table);
-                                delete data.table;
-                            }
+                                if (listState && data.grid) {
+                                    Object.assign(listState.grid, data.grid);
+                                    delete data.grid;
+                                }
 
-                            if (listState && data.grid) {
-                                Object.assign(listState.grid, data.grid);
-                                delete data.grid;
-                            }
-
-                            if (listState) {
-                                Object.assign(listState, data);
-                            }
-                        });
+                                if (listState) {
+                                    Object.assign(listState, data);
+                                }
+                            });
+                        },
+                        setPlaybackFilters: (filters: PlayerFilter[]) => {
+                            set((state) => {
+                                state.playback.filters = filters;
+                            });
+                        },
+                        setPlayerItems: (items: SortableItem<PlayerItem>[]) => {
+                            set((state) => {
+                                state.general.playerItems = items;
+                            });
+                        },
+                        setPlaylistBehavior: (target: PlaylistTarget) => {
+                            set((state) => {
+                                state.general.playlistTarget = target;
+                            });
+                        },
+                        setSettings: (data) => {
+                            set((state) => {
+                                deepMergeIntoState(state, data);
+                            });
+                        },
+                        setSidebarItems: (items: SidebarItemType[]) => {
+                            set((state) => {
+                                state.general.sidebarItems = items;
+                            });
+                        },
+                        setTable: (type: ItemListKey, data: DataTableProps) => {
+                            set((state) => {
+                                const listState = state.lists[type];
+                                if (listState) {
+                                    listState.table = data;
+                                }
+                            });
+                        },
+                        setTranscodingConfig: (config) => {
+                            set((state) => {
+                                state.playback.transcode = config;
+                            });
+                        },
+                        toggleMediaSession: () => {
+                            set((state) => {
+                                state.playback.mediaSession = !state.playback.mediaSession;
+                            });
+                        },
+                        toggleSidebarCollapseShare: () => {
+                            set((state) => {
+                                state.general.sidebarCollapseShared =
+                                    !state.general.sidebarCollapseShared;
+                            });
+                        },
+                        updateCollection: (
+                            id: string,
+                            updates: Partial<Omit<SavedCollection, 'id'>>,
+                        ) => {
+                            set((state) => {
+                                const idx = state.general.collections.findIndex((c) => c.id === id);
+                                if (idx !== -1) {
+                                    Object.assign(state.general.collections[idx], updates);
+                                }
+                            });
+                        },
                     },
-                    setPlaybackFilters: (filters: PlayerFilter[]) => {
-                        set((state) => {
-                            state.playback.filters = filters;
-                        });
-                    },
-                    setSettings: (data) => {
-                        set({ ...get(), ...data });
-                    },
-                    setSidebarItems: (items: SidebarItemType[]) => {
-                        set((state) => {
-                            state.general.sidebarItems = items;
-                        });
-                    },
-                    setTable: (type: ItemListKey, data: DataTableProps) => {
-                        set((state) => {
-                            const listState = state.lists[type];
-                            if (listState) {
-                                listState.table = data;
-                            }
-                        });
-                    },
-                    setTranscodingConfig: (config) => {
-                        set((state) => {
-                            state.playback.transcode = config;
-                        });
-                    },
-                    toggleMediaSession: () => {
-                        set((state) => {
-                            state.playback.mediaSession = !state.playback.mediaSession;
-                        });
-                    },
-                    toggleSidebarCollapseShare: () => {
-                        set((state) => {
-                            state.general.sidebarCollapseShared =
-                                !state.general.sidebarCollapseShared;
-                        });
-                    },
-                },
-                ...initialState,
-            })),
+                    ...initialStateWithEnv,
+                })),
+            ),
             { name: 'store_settings' },
         ),
         {
@@ -1799,10 +2212,175 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 19) {
+                    // Add IDs to presets that don't have them
+                    if (
+                        state.visualizer?.audiomotionanalyzer?.presets &&
+                        Array.isArray(state.visualizer.audiomotionanalyzer.presets)
+                    ) {
+                        state.visualizer.audiomotionanalyzer.presets =
+                            state.visualizer.audiomotionanalyzer.presets.map((preset) => {
+                                if (!preset.id) {
+                                    return {
+                                        ...preset,
+                                        id: nanoid(),
+                                    };
+                                }
+                                return preset;
+                            });
+                    }
+                }
+
+                if (version <= 20) {
+                    // Add TITLE_ARTIST column to SONG and ALBUM table configs
+                    const titleArtistColumn: ItemTableListColumnConfig = {
+                        align: 'start',
+                        autoSize: false,
+                        id: TableColumn.TITLE_ARTIST,
+                        isEnabled: false,
+                        pinned: null,
+                        width: 300,
+                    };
+
+                    const listKeysToUpdate: (LibraryItem | string)[] = [
+                        LibraryItem.SONG,
+                        LibraryItem.ALBUM,
+                        LibraryItem.PLAYLIST_SONG,
+                        LibraryItem.QUEUE_SONG,
+                        ItemListKey.ALBUM_DETAIL,
+                        ItemListKey.FULL_SCREEN,
+                        ItemListKey.SIDE_QUEUE,
+                    ];
+
+                    listKeysToUpdate.forEach((listKey) => {
+                        const listConfig = state.lists[listKey];
+                        if (listConfig?.table?.columns) {
+                            const columns = listConfig.table.columns;
+                            const hasTitleArtist = columns.some(
+                                (col) => col.id === TableColumn.TITLE_ARTIST,
+                            );
+                            if (!hasTitleArtist) {
+                                const titleCombinedIndex = columns.findIndex(
+                                    (col) => col.id === TableColumn.TITLE_COMBINED,
+                                );
+                                if (titleCombinedIndex >= 0) {
+                                    columns.splice(titleCombinedIndex + 1, 0, titleArtistColumn);
+                                } else {
+                                    columns.push(titleArtistColumn);
+                                }
+                            }
+                        }
+                    });
+                }
+
+                if (version <= 21) {
+                    // Add COMPOSER column to SONG and ALBUM table configs
+                    const composerColumn: ItemTableListColumnConfig = {
+                        align: 'start',
+                        autoSize: false,
+                        id: TableColumn.COMPOSER,
+                        isEnabled: false,
+                        pinned: null,
+                        width: 300,
+                    };
+
+                    const listKeysToUpdate: (LibraryItem | string)[] = [
+                        LibraryItem.SONG,
+                        LibraryItem.ALBUM,
+                        LibraryItem.PLAYLIST_SONG,
+                        LibraryItem.QUEUE_SONG,
+                        ItemListKey.ALBUM_DETAIL,
+                        ItemListKey.FULL_SCREEN,
+                        ItemListKey.SIDE_QUEUE,
+                    ];
+
+                    listKeysToUpdate.forEach((listKey) => {
+                        const listConfig = state.lists[listKey];
+                        if (listConfig?.table?.columns) {
+                            const columns = listConfig.table.columns;
+                            const hasComposer = columns.some(
+                                (col) => col.id === TableColumn.COMPOSER,
+                            );
+                            if (!hasComposer) {
+                                const artistIndex = columns.findIndex(
+                                    (col) => col.id === TableColumn.ARTIST,
+                                );
+                                if (artistIndex >= 0) {
+                                    columns.splice(artistIndex + 1, 0, composerColumn);
+                                } else {
+                                    columns.push(composerColumn);
+                                }
+                            }
+                        }
+                    });
+                }
+
+                if (version <= 22) {
+                    // Add enableHeader to all list table configs
+                    Object.keys(state.lists).forEach((listKey) => {
+                        const listConfig = state.lists[listKey as keyof typeof state.lists];
+                        if (
+                            listConfig?.table &&
+                            typeof listConfig.table === 'object' &&
+                            !('enableHeader' in listConfig.table)
+                        ) {
+                            (listConfig.table as any).enableHeader = true;
+                        }
+                    });
+                }
+
+                if (version <= 23) {
+                    // Add FAVORITE_SONGS to album artist page configuration
+                    const hasFavoriteSongs = state.general.artistItems?.some(
+                        (item) => item.id === ArtistItem.FAVORITE_SONGS,
+                    );
+
+                    if (!hasFavoriteSongs) {
+                        state.general.artistItems.push({
+                            disabled: false,
+                            id: ArtistItem.FAVORITE_SONGS,
+                        });
+                    }
+                }
+
+                if (version <= 26) {
+                    // Add ALBUM_GROUP column to the song table config
+                    const listKeysToUpdate: ItemListKey[] = [
+                        ItemListKey.SONG,
+                        ItemListKey.FOLDER,
+                        ItemListKey.PLAYLIST_SONG,
+                        ItemListKey.ALBUM_ARTIST_SONG,
+                        ItemListKey.GENRE_SONG,
+                        ItemListKey.QUEUE_SONG,
+                        ItemListKey.FULL_SCREEN,
+                        ItemListKey.SIDE_QUEUE,
+                    ];
+
+                    listKeysToUpdate.forEach((listKey) => {
+                        const listConfig = state.lists[listKey as keyof typeof state.lists];
+                        if (listConfig?.table?.columns) {
+                            const columns = listConfig.table.columns;
+                            const hasAlbumGroup = columns.some(
+                                (col) => col.id === TableColumn.ALBUM_GROUP,
+                            );
+                            if (!hasAlbumGroup) {
+                                columns.push({
+                                    align: 'start',
+                                    autoSize: false,
+                                    id: TableColumn.ALBUM_GROUP,
+                                    isEnabled: false,
+                                    pinned: 'left',
+                                    width: 200,
+                                });
+                            }
+                        }
+                    });
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 19,
+            version: 26,
         },
     ),
 );
@@ -1865,12 +2443,181 @@ export const useListSettings = (type: ItemListKey) =>
         shallow,
     ) as ItemListSettings;
 
-export const usePrimaryColor = () => useSettingsStore((store) => store.general.accent);
+export const usePrimaryColor = () => useSettingsStore((store) => store.general.accent, shallow);
 
-export const usePlayerbarSlider = () => useSettingsStore((store) => store.general.playerbarSlider);
+export const usePlayerbarSlider = () =>
+    useSettingsStore((store) => store.general.playerbarSlider, shallow);
 
-export const useGenreTarget = () => useSettingsStore((store) => store.general.genreTarget);
+export const useGenreTarget = () => useSettingsStore((store) => store.general.genreTarget, shallow);
+
+export const usePlaylistTarget = () =>
+    useSettingsStore((store) => store.general.playlistTarget, shallow);
+
+export const useLanguage = () => useSettingsStore((state) => state.general.language, shallow);
+
+export const useAccent = () => useSettingsStore((state) => state.general.accent, shallow);
+
+export const useNativeAspectRatio = () =>
+    useSettingsStore((state) => state.general.nativeAspectRatio, shallow);
+
+export const useButtonSize = () => useSettingsStore((state) => state.general.buttonSize, shallow);
+
+export const useSkipButtons = () => useSettingsStore((state) => state.general.skipButtons, shallow);
+
+export const useImageRes = () => useSettingsStore((state) => state.general.imageRes, shallow);
+
+export const useVolumeWidth = () => useSettingsStore((state) => state.general.volumeWidth, shallow);
+
+export const useFollowCurrentSong = () =>
+    useSettingsStore((state) => state.general.followCurrentSong, shallow);
+
+export const useThemeSettings = () =>
+    useSettingsStore(
+        (state) => ({
+            followSystemTheme: state.general.followSystemTheme,
+            primaryShade: state.general.primaryShade,
+            theme: state.general.theme,
+            themeDark: state.general.themeDark,
+            themeLight: state.general.themeLight,
+            useThemeAccentColor: state.general.useThemeAccentColor,
+            useThemePrimaryShade: state.general.useThemePrimaryShade,
+        }),
+        shallow,
+    );
+
+export const useSideQueueType = () =>
+    useSettingsStore((state) => state.general.sideQueueType, shallow);
+
+export const useVolumeWheelStep = () =>
+    useSettingsStore((state) => state.general.volumeWheelStep, shallow);
+
+export const useCollections = () => {
+    const collections = useSettingsStore((state) => state.general.collections, shallow);
+
+    return useMemo(
+        () => [...(collections ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
+        [collections],
+    );
+};
+
+export const useSidebarPlaylistList = () =>
+    useSettingsStore((state) => state.general.sidebarPlaylistList, shallow);
+
+export const useSidebarPlaylistSorting = () =>
+    useSettingsStore((state) => state.general.sidebarPlaylistSorting, shallow);
+
+export const useSidebarPlaylistListFilterRegex = () =>
+    useSettingsStore((state) => state.general.sidebarPlaylistListFilterRegex, shallow);
+
+export const useSidebarItems = () =>
+    useSettingsStore((state) => state.general.sidebarItems, shallow);
+
+export const usePlayerItems = () => useSettingsStore((state) => state.general.playerItems, shallow);
+
+export const useSidebarCollapsedNavigation = () =>
+    useSettingsStore((state) => state.general.sidebarCollapsedNavigation, shallow);
+
+export const usePlayerbarOpenDrawer = () =>
+    useSettingsStore((state) => state.general.playerbarOpenDrawer, shallow);
+
+export const useShowRatings = () => useSettingsStore((state) => state.general.showRatings, shallow);
+
+export const useArtistRadioCount = () =>
+    useSettingsStore((state) => state.general.artistRadioCount, shallow);
+
+export const useArtistBackground = () =>
+    useSettingsStore(
+        (state) => ({
+            artistBackground: state.general.artistBackground,
+            artistBackgroundBlur: state.general.artistBackgroundBlur,
+        }),
+        shallow,
+    );
+
+export const useAlbumBackground = () =>
+    useSettingsStore(
+        (state) => ({
+            albumBackground: state.general.albumBackground,
+            albumBackgroundBlur: state.general.albumBackgroundBlur,
+        }),
+        shallow,
+    );
+
+export const useExternalLinks = () =>
+    useSettingsStore(
+        (state) => ({
+            externalLinks: state.general.externalLinks,
+            lastFM: state.general.lastFM,
+            musicBrainz: state.general.musicBrainz,
+        }),
+        shallow,
+    );
+
+export const useHomeFeature = () => useSettingsStore((state) => state.general.homeFeature, shallow);
+
+export const useHomeFeatureStyle = () =>
+    useSettingsStore((state) => state.general.homeFeatureStyle);
+
+export const useHomeItems = () => useSettingsStore((state) => state.general.homeItems, shallow);
+
+export const useArtistItems = () => useSettingsStore((state) => state.general.artistItems, shallow);
+
+export const useArtistReleaseTypeItems = () =>
+    useSettingsStore((state) => state.general.artistReleaseTypeItems, shallow);
+
+export const useZoomFactor = () => useSettingsStore((state) => state.general.zoomFactor, shallow);
+
+export const usePathReplace = () =>
+    useSettingsStore(
+        (state) => ({
+            pathReplace: state.general.pathReplace,
+            pathReplaceWith: state.general.pathReplaceWith,
+        }),
+        shallow,
+    );
+
+export const useLastfmApiKey = () =>
+    useSettingsStore((state) => state.general.lastfmApiKey, shallow);
+
+export const useSidebarPanelOrder = () =>
+    useSettingsStore((state) => state.general.sidebarPanelOrder, shallow);
+
+export const useCombinedLyricsAndVisualizer = () =>
+    useSettingsStore((state) => state.general.combinedLyricsAndVisualizer, shallow);
+
+export const useShowLyricsInSidebar = () =>
+    useSettingsStore((state) => state.general.showLyricsInSidebar, shallow);
+
+export const useShowVisualizerInSidebar = () =>
+    useSettingsStore((state) => state.general.showVisualizerInSidebar, shallow);
 
 export const useAutoDJSettings = () => useSettingsStore((store) => store.autoDJ, shallow);
 
 export const useVisualizerSettings = () => useSettingsStore((store) => store.visualizer, shallow);
+
+export const subscribeButterchurnPreset = (
+    onChange: (preset: string | undefined, prevPreset: string | undefined) => void,
+) => {
+    return useSettingsStore.subscribe(
+        (state) => state.visualizer.butterchurn.currentPreset,
+        (preset, prevPreset) => {
+            onChange(preset, prevPreset);
+        },
+    );
+};
+
+export const useButterchurnSettings = () => {
+    return useSettingsStore((store) => {
+        return {
+            blendTime: store.visualizer.butterchurn.blendTime,
+            cyclePresets: store.visualizer.butterchurn.cyclePresets,
+            cycleTime: store.visualizer.butterchurn.cycleTime,
+            ignoredPresets: store.visualizer.butterchurn.ignoredPresets,
+            includeAllPresets: store.visualizer.butterchurn.includeAllPresets,
+            maxFPS: store.visualizer.butterchurn.maxFPS,
+            opacity: store.visualizer.butterchurn.opacity,
+            randomizeNextPreset: store.visualizer.butterchurn.randomizeNextPreset,
+            selectedPresets: store.visualizer.butterchurn.selectedPresets,
+        };
+    }, shallow);
+};

@@ -1,10 +1,14 @@
-import { useSuspenseInfiniteQuery } from '@tanstack/react-query';
-import { useCallback, useMemo } from 'react';
+import { QueryFunctionContext, useSuspenseInfiniteQuery } from '@tanstack/react-query';
+import { Suspense, useCallback, useMemo } from 'react';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
-import { GridCarousel } from '/@/renderer/components/grid-carousel/grid-carousel-v2';
-import { MemoizedItemCard } from '/@/renderer/components/item-card/item-card';
+import {
+    GridCarousel,
+    GridCarouselSkeletonFallback,
+    useGridCarouselContainerQuery,
+} from '/@/renderer/components/grid-carousel/grid-carousel-v2';
+import { DataRow, MemoizedItemCard } from '/@/renderer/components/item-card/item-card';
 import { useDefaultItemListControls } from '/@/renderer/components/item-list/helpers/item-list-controls';
 import { useGridRows } from '/@/renderer/components/item-list/helpers/use-grid-rows';
 import { useCurrentServerId } from '/@/renderer/store';
@@ -19,29 +23,42 @@ import {
 import { ItemListKey } from '/@/shared/types/types';
 
 interface AlbumArtistCarouselProps {
+    containerQuery?: ReturnType<typeof useGridCarouselContainerQuery>;
     excludeIds?: string[];
     query?: Partial<Omit<AlbumArtistListQuery, 'startIndex'>>;
+    queryKey?: QueryFunctionContext['queryKey'];
     rowCount?: number;
     sortBy: AlbumArtistListSort;
     sortOrder: SortOrder;
     title: React.ReactNode | string;
 }
 
-export const BaseAlbumArtistInfiniteCarousel = (props: AlbumArtistCarouselProps) => {
-    const { excludeIds, query: additionalQuery, rowCount = 1, sortBy, sortOrder, title } = props;
-    const rows = useGridRows(LibraryItem.ALBUM_ARTIST, ItemListKey.ALBUM_ARTIST);
+const BaseAlbumArtistInfiniteCarousel = (props: AlbumArtistCarouselProps & { rows: DataRow[] }) => {
+    const {
+        containerQuery,
+        excludeIds,
+        query: additionalQuery,
+        queryKey,
+        rowCount = 1,
+        rows,
+        sortBy,
+        sortOrder,
+        title,
+    } = props;
     const {
         data: albumArtists,
         fetchNextPage,
         hasNextPage,
+        isFetchingNextPage,
         refetch,
-    } = useAlbumArtistListInfinite(sortBy, sortOrder, 20, additionalQuery);
+    } = useAlbumArtistListInfinite(sortBy, sortOrder, 20, additionalQuery, queryKey);
 
     const controls = useDefaultItemListControls();
 
     const cards = useMemo(() => {
         // Flatten all pages and filter excluded IDs
-        const allItems = albumArtists.pages.flatMap((page: AlbumArtistListResponse) => page.items);
+        const allItems =
+            albumArtists?.pages.flatMap((page: AlbumArtistListResponse) => page.items) || [];
         const filteredItems = excludeIds
             ? allItems.filter((albumArtist) => !excludeIds.includes(albumArtist.id))
             : allItems;
@@ -60,7 +77,7 @@ export const BaseAlbumArtistInfiniteCarousel = (props: AlbumArtistCarouselProps)
             ),
             id: albumArtist.id,
         }));
-    }, [albumArtists.pages, controls, excludeIds, rows]);
+    }, [albumArtists, controls, excludeIds, rows]);
 
     const handleNextPage = useCallback(() => {}, []);
 
@@ -71,10 +88,10 @@ export const BaseAlbumArtistInfiniteCarousel = (props: AlbumArtistCarouselProps)
     }, [refetch]);
 
     const firstPageItems = excludeIds
-        ? albumArtists.pages[0]?.items.filter(
+        ? albumArtists?.pages[0]?.items.filter(
               (albumArtist) => !excludeIds.includes(albumArtist.id),
           ) || []
-        : albumArtists.pages[0]?.items || [];
+        : albumArtists?.pages[0]?.items || [];
 
     if (firstPageItems.length === 0) {
         return null;
@@ -83,11 +100,15 @@ export const BaseAlbumArtistInfiniteCarousel = (props: AlbumArtistCarouselProps)
     return (
         <GridCarousel
             cards={cards}
+            containerQuery={containerQuery}
             hasNextPage={hasNextPage}
+            isFetchingNextPage={isFetchingNextPage}
             loadNextPage={fetchNextPage}
             onNextPage={handleNextPage}
             onPrevPage={handlePrevPage}
             onRefresh={handleRefresh}
+            placeholderItemType={LibraryItem.ALBUM_ARTIST}
+            placeholderRows={rows}
             rowCount={rowCount}
             title={title}
         />
@@ -95,7 +116,22 @@ export const BaseAlbumArtistInfiniteCarousel = (props: AlbumArtistCarouselProps)
 };
 
 export const AlbumArtistInfiniteCarousel = (props: AlbumArtistCarouselProps) => {
-    return <BaseAlbumArtistInfiniteCarousel {...props} />;
+    const rows = useGridRows(LibraryItem.ALBUM_ARTIST, ItemListKey.ALBUM_ARTIST);
+
+    return (
+        <Suspense
+            fallback={
+                <GridCarouselSkeletonFallback
+                    containerQuery={props.containerQuery}
+                    placeholderItemType={LibraryItem.ALBUM_ARTIST}
+                    placeholderRows={rows}
+                    title={props.title}
+                />
+            }
+        >
+            <BaseAlbumArtistInfiniteCarousel {...props} rows={rows} />
+        </Suspense>
+    );
 };
 
 function useAlbumArtistListInfinite(
@@ -103,8 +139,15 @@ function useAlbumArtistListInfinite(
     sortOrder: SortOrder,
     itemLimit: number,
     additionalQuery?: Partial<Omit<AlbumArtistListQuery, 'startIndex'>>,
+    overrideQueryKey?: QueryFunctionContext['queryKey'],
 ) {
     const serverId = useCurrentServerId();
+
+    const defaultQueryKey = queryKeys.albumArtists.infiniteList(serverId, {
+        sortBy,
+        sortOrder,
+        ...additionalQuery,
+    });
 
     const query = useSuspenseInfiniteQuery<AlbumArtistListResponse>({
         getNextPageParam: (lastPage, _allPages, lastPageParam) => {
@@ -129,11 +172,7 @@ function useAlbumArtistListInfinite(
                 },
             });
         },
-        queryKey: queryKeys.albumArtists.infiniteList(serverId, {
-            sortBy,
-            sortOrder,
-            ...additionalQuery,
-        }),
+        queryKey: overrideQueryKey || defaultQueryKey,
     });
 
     return query;

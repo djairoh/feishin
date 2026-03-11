@@ -153,6 +153,14 @@ const album = z.object({
     contributors: z.array(contributor).optional(),
     coverArt: z.string(),
     created: z.string(),
+    discTitles: z
+        .array(
+            z.object({
+                disc: z.number(),
+                title: z.string(),
+            }),
+        )
+        .optional(),
     duration: z.number(),
     explicitStatus: z.string().optional(),
     genre: z.string().optional(),
@@ -613,6 +621,7 @@ const getIndexes = z.object({
             .object({
                 artist: z
                     .object({
+                        coverArt: z.string().optional(),
                         id: z.string(),
                         name: z.string(),
                     })

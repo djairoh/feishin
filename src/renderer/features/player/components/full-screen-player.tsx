@@ -17,7 +17,14 @@ import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { SONG_TABLE_COLUMNS } from '/@/renderer/components/item-list/item-table-list/default-columns';
 import { FullScreenPlayerImage } from '/@/renderer/features/player/components/full-screen-player-image';
 import { FullScreenPlayerQueue } from '/@/renderer/features/player/components/full-screen-player-queue';
-import { ListConfigMenu } from '/@/renderer/features/shared/components/list-config-menu';
+import {
+    useIsRadioActive,
+    useRadioPlayer,
+} from '/@/renderer/features/radio/hooks/use-radio-player';
+import {
+    ListConfigMenu,
+    SONG_DISPLAY_TYPES,
+} from '/@/renderer/features/shared/components/list-config-menu';
 import { useFastAverageColor } from '/@/renderer/hooks';
 import {
     useFullScreenPlayerStore,
@@ -220,11 +227,7 @@ const BackgroundImageOverlay = memo(
 
 BackgroundImageOverlay.displayName = 'BackgroundImageOverlay';
 
-interface ControlsProps {
-    isPageHovered: boolean;
-}
-
-const Controls = ({ isPageHovered }: ControlsProps) => {
+const Controls = () => {
     const { t } = useTranslation();
     const {
         dynamicBackground,
@@ -241,7 +244,7 @@ const Controls = ({ isPageHovered }: ControlsProps) => {
     const lyricConfig = { ...lyricsSettings, ...displaySettings };
 
     const handleToggleFullScreenPlayer = () => {
-        setStore({ expanded: !expanded });
+        setStore({ expanded: !expanded, visualizerExpanded: false });
     };
 
     const handleLyricsSettings = (property: string, value: any) => {
@@ -271,6 +274,7 @@ const Controls = ({ isPageHovered }: ControlsProps) => {
 
     return (
         <Group
+            className={styles.controlsContainer}
             gap="sm"
             p="1rem"
             pos="absolute"
@@ -285,7 +289,7 @@ const Controls = ({ isPageHovered }: ControlsProps) => {
                 iconProps={{ size: 'lg' }}
                 onClick={handleToggleFullScreenPlayer}
                 tooltip={{ label: t('common.minimize', { postProcess: 'titleCase' }) }}
-                variant={isPageHovered ? 'default' : 'subtle'}
+                variant="subtle"
             />
             <Popover position="bottom-start">
                 <Popover.Target>
@@ -293,7 +297,7 @@ const Controls = ({ isPageHovered }: ControlsProps) => {
                         icon="settings2"
                         iconProps={{ size: 'lg' }}
                         tooltip={{ label: t('common.configure', { postProcess: 'titleCase' }) }}
-                        variant={isPageHovered ? 'default' : 'subtle'}
+                        variant="subtle"
                     />
                 </Popover.Target>
                 <Popover.Dropdown>
@@ -551,14 +555,16 @@ const Controls = ({ isPageHovered }: ControlsProps) => {
                             />
                         </Option.Control>
                     </Option>
-                    <Divider my="sm" />
                 </Popover.Dropdown>
             </Popover>
             <ListConfigMenu
                 buttonProps={{
-                    variant: isPageHovered ? 'default' : 'subtle',
+                    variant: 'subtle',
                 }}
-                displayTypes={[{ hidden: true, value: ListDisplayType.GRID }]}
+                displayTypes={[
+                    { hidden: true, value: ListDisplayType.GRID },
+                    ...SONG_DISPLAY_TYPES,
+                ]}
                 listKey={ItemListKey.FULL_SCREEN}
                 optionsConfig={{
                     table: {
@@ -616,20 +622,11 @@ interface PlayerContainerProps {
     children: ReactNode;
     dynamicBackground: boolean | undefined;
     dynamicIsImage: boolean | undefined;
-    onMouseEnter: () => void;
-    onMouseLeave: () => void;
     windowBarStyle: Platform;
 }
 
 const PlayerContainer = memo(
-    ({
-        children,
-        dynamicBackground,
-        dynamicIsImage,
-        onMouseEnter,
-        onMouseLeave,
-        windowBarStyle,
-    }: PlayerContainerProps) => {
+    ({ children, dynamicBackground, dynamicIsImage, windowBarStyle }: PlayerContainerProps) => {
         const currentSong = usePlayerSong();
         const imageUrl = useItemImageUrl({
             id: currentSong?.imageId || undefined,
@@ -650,8 +647,6 @@ const PlayerContainer = memo(
                 custom={{ background, dynamicBackground, windowBarStyle }}
                 exit="closed"
                 initial="closed"
-                onMouseEnter={onMouseEnter}
-                onMouseLeave={onMouseLeave}
                 transition={{ duration: 2 }}
                 variants={containerVariants}
             >
@@ -671,8 +666,11 @@ export const FullScreenPlayer = () => {
     const { dynamicBackground, dynamicImageBlur, dynamicIsImage } = useFullScreenPlayerStore();
     const { setStore } = useFullScreenPlayerStoreActions();
     const { windowBarStyle } = useWindowSettings();
+    const isRadioActive = useIsRadioActive();
+    const { isPlaying: isRadioPlaying } = useRadioPlayer();
 
-    const [isPageHovered, setIsPageHovered] = useState(false);
+    const isPlayingRadio = isRadioActive && isRadioPlaying;
+    const effectiveDynamicBackground = dynamicBackground && !isPlayingRadio;
 
     const location = useLocation();
     const isOpenedRef = useRef<boolean | null>(null);
@@ -687,15 +685,13 @@ export const FullScreenPlayer = () => {
 
     return (
         <PlayerContainer
-            dynamicBackground={dynamicBackground}
+            dynamicBackground={effectiveDynamicBackground}
             dynamicIsImage={dynamicIsImage}
-            onMouseEnter={() => setIsPageHovered(true)}
-            onMouseLeave={() => setIsPageHovered(false)}
             windowBarStyle={windowBarStyle}
         >
-            <Controls isPageHovered={isPageHovered} />
+            <Controls />
             <BackgroundImageOverlay
-                dynamicBackground={dynamicBackground}
+                dynamicBackground={effectiveDynamicBackground}
                 dynamicImageBlur={dynamicImageBlur}
             />
             <div className={styles.responsiveContainer}>

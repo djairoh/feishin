@@ -32,6 +32,11 @@ export const useQueueRestoreTimestamp = () => {
     );
 };
 
+export const QueueRestoreTimestampHook = () => {
+    useQueueRestoreTimestamp();
+    return null;
+};
+
 export const useSaveQueue = () => {
     const serverId = useCurrentServerId();
 
@@ -84,8 +89,7 @@ export const useSaveQueue = () => {
                 });
 
                 toast.success({
-                    message: '',
-                    title: t('form.saveQueue.success', { postProcess: 'sentenceCase' }),
+                    message: t('form.saveQueue.success', { postProcess: 'sentenceCase' }),
                 });
             } catch (error) {
                 toast.error({

@@ -1,6 +1,4 @@
 import clsx from 'clsx';
-import { Fragment, memo, useMemo } from 'react';
-import { generatePath, Link } from 'react-router';
 
 import styles from './album-artists-column.module.css';
 
@@ -10,24 +8,15 @@ import {
     ItemTableListInnerColumn,
     TableColumnContainer,
 } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
-import { AppRoute } from '/@/renderer/router/routes';
-import { Text } from '/@/shared/components/text/text';
-import { RelatedAlbumArtist } from '/@/shared/types/domain-types';
+import { JoinedArtists } from '/@/renderer/features/albums/components/joined-artists';
+import { Album, RelatedAlbumArtist, Song } from '/@/shared/types/domain-types';
 
 const AlbumArtistsColumn = (props: ItemTableListInnerColumn) => {
-    const row: RelatedAlbumArtist[] | undefined = (
-        props.data as (RelatedAlbumArtist[] | undefined)[]
-    )[props.rowIndex]?.[props.columns[props.columnIndex].id];
+    const rowItem = props.getRowItem?.(props.rowIndex) ?? (props.data as any[])[props.rowIndex];
+    const row: RelatedAlbumArtist[] | undefined = rowItem?.[props.columns[props.columnIndex].id];
 
-    const albumArtists = useMemo(() => {
-        if (!row) return [];
-        return row.map((albumArtist) => {
-            const path = generatePath(AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL, {
-                albumArtistId: albumArtist.id,
-            });
-            return { ...albumArtist, path };
-        });
-    }, [row]);
+    const item = rowItem as Album | Song | undefined;
+    const albumArtistString = item && 'albumArtistName' in item ? item.albumArtistName : '';
 
     if (Array.isArray(row)) {
         return (
@@ -38,21 +27,20 @@ const AlbumArtistsColumn = (props: ItemTableListInnerColumn) => {
                         [styles.large]: props.size === 'large',
                     })}
                 >
-                    {albumArtists.map((albumArtist, index) => (
-                        <Fragment key={albumArtist.id}>
-                            <Text
-                                component={Link}
-                                isLink
-                                isMuted
-                                isNoSelect
-                                state={{ item: albumArtist }}
-                                to={albumArtist.path}
-                            >
-                                {albumArtist.name}
-                            </Text>
-                            {index < albumArtists.length - 1 && ', '}
-                        </Fragment>
-                    ))}
+                    <JoinedArtists
+                        artistName={albumArtistString}
+                        artists={row}
+                        linkProps={{ fw: 400, isMuted: true }}
+                        rootTextProps={{
+                            className: clsx(styles.artistsContainer, {
+                                [styles.compact]: props.size === 'compact',
+                                [styles.large]: props.size === 'large',
+                            }),
+                            fw: 400,
+                            isMuted: true,
+                            size: 'sm',
+                        }}
+                    />
                 </div>
             </TableColumnContainer>
         );
@@ -65,6 +53,4 @@ const AlbumArtistsColumn = (props: ItemTableListInnerColumn) => {
     return <ColumnSkeletonVariable {...props} />;
 };
 
-export const AlbumArtistsColumnMemo = memo(AlbumArtistsColumn);
-
-export { AlbumArtistsColumnMemo as AlbumArtistsColumn };
+export { AlbumArtistsColumn };

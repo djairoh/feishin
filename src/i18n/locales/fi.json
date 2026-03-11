@@ -3,7 +3,8 @@
         "size": "koko",
         "search": "etsi",
         "sortOrder": "järjestys",
-        "setting": "asetus",
+        "setting_one": "asetus",
+        "setting_other": "asetukset",
         "title": "otsikko",
         "trackNumber": "raita",
         "action_one": "toiminto",
@@ -44,7 +45,7 @@
         "owner": "omistaja",
         "path": "polku",
         "preview": "esikatsele",
-        "previousSong": "edellinen $t(entity.track_one)",
+        "previousSong": "edellinen $t(entity.track, {\"count\": 1})",
         "resetToDefault": "palauta oletusarvoihin",
         "restartRequired": "vaatii uudelleenkäynnistyksen",
         "right": "oikea",
@@ -66,7 +67,7 @@
         "codec": "koodekki",
         "create": "luo",
         "description": "kuvaus",
-        "currentSong": "nykyinen $t(entity.track_one)",
+        "currentSong": "nykyinen $t(entity.track, {\"count\": 1})",
         "delete": "poista",
         "duration": "kesto",
         "edit": "muokkaa",
@@ -101,7 +102,24 @@
         "recordLabel": "levy-yhtiö",
         "releaseType": "julkaisun tyyppi",
         "explicit": "eksplisiittinen",
-        "clean": "puhdas"
+        "clean": "puhdas",
+        "countSelected": "{{count}} valittuna",
+        "doNotShowAgain": "älä näytä uudelleen",
+        "view": "katso",
+        "example": "esimerkki",
+        "externalLinks": "ulkoiset linkit",
+        "faster": "nopeammin",
+        "filter_single": "yksi",
+        "filter_multiple": "useampi",
+        "mood": "mieliala",
+        "noFilters": "suodattimia ei ole määritetty",
+        "retry": "yritä uudelleen",
+        "rename": "nimeä uudelleen",
+        "slower": "hitaammin",
+        "sort": "järjestä",
+        "gridRows": "ruudukon rivejä",
+        "tableColumns": "taulukon sarakkeita",
+        "itemsMore": "{{count}} lisää"
     },
     "entity": {
         "album_one": "albumi",
@@ -130,7 +148,7 @@
         "genre_other": "genret",
         "genreWithCount_one": "{{count}} genre",
         "genreWithCount_other": "{{count}} genreä",
-        "smartPlaylist": "älykäs $t(entity.playlist_one)",
+        "smartPlaylist": "älykäs $t(entity.playlist, {\"count\": 1})",
         "track_one": "raita",
         "track_other": "raidat",
         "trackWithCount_one": "{{count}} raita",
@@ -138,31 +156,52 @@
         "play_one": "{{count}} toisto",
         "play_other": "{{count}} toistoa",
         "song_one": "kappale",
-        "song_other": "kappaleet"
+        "song_other": "kappaleet",
+        "radioStation_one": "radioasema",
+        "radioStation_other": "radioasemaa",
+        "radioStationWithCount_one": "{{count}} radioasema",
+        "radioStationWithCount_other": "{{count}} radioasemaa"
     },
     "action": {
         "clearQueue": "tyhjennä jono",
-        "createPlaylist": "luo $t(entity.playlist_one)",
+        "createPlaylist": "luo $t(entity.playlist, {\"count\": 1})",
         "deselectAll": "poista kaikkien valinta",
-        "editPlaylist": "muokkaa $t(entity.playlist_one)",
+        "editPlaylist": "muokkaa $t(entity.playlist, {\"count\": 1})",
         "removeFromQueue": "poista jonosta",
-        "viewPlaylists": "katsele $t(entity.playlist_other)",
+        "viewPlaylists": "katsele $t(entity.playlist, {\"count\": 2})",
         "openIn": {
             "lastfm": "Avaa Last.fm:ssä",
             "musicbrainz": "Avaa MusicBrainz:ssä"
         },
         "goToPage": "mene sivulle",
-        "moveToBottom": "siirry pohjalle",
+        "moveToBottom": "siirrä alimmaksi",
         "moveToTop": "siirry ylös",
-        "addToFavorites": "lisää kohteeseen $t(entity.favorite_other)",
-        "addToPlaylist": "lisää kohteeseen $t(entity.playlist_one)",
+        "addToFavorites": "lisää kohteeseen $t(entity.favorite, {\"count\": 2})",
+        "addToPlaylist": "lisää kohteeseen $t(entity.playlist, {\"count\": 1})",
         "refresh": "$t(common.refresh)",
-        "removeFromFavorites": "poista kohteesta $t(entity.favorite_other)",
+        "removeFromFavorites": "poista kohteesta $t(entity.favorite, {\"count\": 2})",
         "toggleSmartPlaylistEditor": "kytke $t(entity.smartPlaylist) editori",
-        "deletePlaylist": "poista $t(entity.playlist_one)",
-        "removeFromPlaylist": "poista kohteesta $t(entity.playlist_one)",
+        "deletePlaylist": "poista $t(entity.playlist, {\"count\": 1})",
+        "removeFromPlaylist": "poista kohteesta $t(entity.playlist, {\"count\": 1})",
         "setRating": "aseta arvostelu",
-        "moveToNext": "siirry seuraavaan"
+        "moveToNext": "siirry seuraavaan",
+        "selectRangeOfItems": "valitse useita peräkkäisiä kohteita",
+        "goToCurrent": "siirry nykyiseen kohteeseen",
+        "createRadioStation": "luo $t(entity.radioStation, {\"count\": 1})",
+        "deleteRadioStation": "poista $t(entity.radioStation, {\"count\": 1})",
+        "selectAll": "valitse kaikki",
+        "downloadStarted": "aloitettiin lataamaan {{count}} kohdetta",
+        "moveUp": "siirrä ylöspäin",
+        "moveDown": "siirrä alaspäin",
+        "holdToMoveToTop": "pidä pohjassa siirtääksesi ylimmäksi",
+        "holdToMoveToBottom": "pidä pohjassa siirtääksesi alimmaksi",
+        "moveItems": "siirrä kohteet",
+        "shuffle": "sekoita",
+        "shuffleAll": "sekoita kaikki",
+        "shuffleSelected": "sekoita valitut",
+        "viewMore": "katso lisää",
+        "openApplicationDirectory": "avaa ohjelman kansio",
+        "addOrRemoveFromSelection": "lisää tai poista valinnasta"
     },
     "error": {
         "remoteEnableError": "virhe tapahtui yrittäessä $t(common.enable) etäpalvelinta",
@@ -188,16 +227,24 @@
         "remotePortWarning": "käynnistä palvelin uudestaan ottaaksesi uuden portin käyttöön",
         "endpointNotImplementedError": "päätepiste {{endpoint}} ei ole toteutettu {{serverType}} varten",
         "badValue": "kelpaamaton optio \"{{value}}\". tätä arvoa ei ole enää olemassa",
-        "notificationDenied": "luvat ilmouilmoituksia varten evättiin. tällä asetuksella ei ole vaikutusta"
+        "notificationDenied": "luvat ilmouilmoituksia varten evättiin. tällä asetuksella ei ole vaikutusta",
+        "invalidJson": "virheellinen JSON",
+        "multipleServerSaveQueueError": "soittojonossa on yksi tai useampi kappale, jotka eivät ole nykyiseltä palvelimelta. tätä ei ole tuettu",
+        "noNetwork": "palvelin ei ole käytettävissä",
+        "noNetworkDescription": "ei voida yhdistää palvelimeen",
+        "serverLockSingleServer": "lukitussa tilassa sallitaan vain yksi palvelin",
+        "settingsSyncError": "rendererin ja pääprosessin asetukset eivät täsmää. Käynnistä sovellus uudelleen, jotta muutokset otetaan käyttöön",
+        "playbackPausedDueToError": "toisto tauotettiin virheen takia",
+        "saveQueueFailed": "jonon tallentaminen epäonnistui"
     },
     "filter": {
-        "album": "$t(entity.album_one)",
-        "albumArtist": "$t(entity.albumArtist_one)",
-        "artist": "$t(entity.artist_one)",
+        "album": "$t(entity.album, {\"count\": 1})",
+        "albumArtist": "$t(entity.albumArtist, {\"count\": 1})",
+        "artist": "$t(entity.artist, {\"count\": 1})",
         "biography": "biografia",
         "bitrate": "bittinopeus",
         "bpm": "lyöntiä minuutissa (bpm)",
-        "channels": "$t(common.channel_other)",
+        "channels": "$t(common.channel, {\"count\": 2})",
         "title": "otsikko",
         "playCount": "toistomäärä",
         "dateAdded": "lisätty päivänä",
@@ -213,12 +260,12 @@
         "search": "haku",
         "trackNumber": "raita",
         "isPublic": "on julkinen",
-        "genre": "$t(entity.genre_one)",
+        "genre": "$t(entity.genre, {\"count\": 1})",
         "favorited": "suosikeissa",
         "fromYear": "vuodelta",
         "isRated": "on arvosteltu",
         "recentlyPlayed": "äskettäin toistetut",
-        "albumCount": "$t(entity.album_other) määrä",
+        "albumCount": "$t(entity.album, {\"count\": 2}) määrä",
         "disc": "levy",
         "duration": "kesto",
         "id": "tunnus",
@@ -233,7 +280,10 @@
         "owner": "$t(common.owner)",
         "path": "polku",
         "songCount": "kappalemäärä",
-        "explicitStatus": "$t(common.explicitStatus)"
+        "explicitStatus": "$t(common.explicitStatus)",
+        "matchAnd": "ja",
+        "matchOr": "tai",
+        "sortName": "järjestä nimen mukaan"
     },
     "form": {
         "addServer": {
@@ -249,40 +299,44 @@
             "input_username": "käyttäjänimi",
             "success": "palvelin lisätty onnistuneesti",
             "input_preferInstantMix": "suosi pika-miksausta",
-            "input_preferInstantMixDescription": "käytä vain pika-miksausta saadaksesi samankaltaisia kappaleita. käytännöllinen jos sinulla on lisäosia, jotka muuttavat tätä käytöstä"
+            "input_preferInstantMixDescription": "käytä vain pika-miksausta saadaksesi samankaltaisia kappaleita. käytännöllinen jos sinulla on lisäosia, jotka muuttavat tätä käytöstä",
+            "input_preferRemoteUrl": "suosi julkista url-osoitetta",
+            "input_remoteUrl": "julkinen url-osoite",
+            "input_remoteUrlPlaceholder": "valinnainen: julkinen url-osoite ulkoisille toiminnoille"
         },
         "createPlaylist": {
             "input_public": "julkinen",
             "input_name": "$t(common.name)",
             "input_owner": "$t(common.owner)",
-            "success": "$t(entity.playlist_one) luotu onnistuneesti",
-            "title": "luo $t(entity.playlist_one)",
+            "success": "$t(entity.playlist, {\"count\": 1}) luotu onnistuneesti",
+            "title": "luo $t(entity.playlist, {\"count\": 1})",
             "input_description": "$t(common.description)"
         },
         "addToPlaylist": {
             "input_skipDuplicates": "ohita kaksoiskappaleet",
             "success": "$t(entity.trackWithCount, {\"count\": {{message}} }) lisätty $t(entity.playlistWithCount, {\"count\": {{numOfPlaylists}} })",
-            "title": "lisää soittolistalle $t(entity.playlist_one)",
-            "input_playlists": "$t(entity.playlist_other)",
-            "create": "luo $t(entity.playlist_one) {{playlist}}",
-            "searchOrCreate": "hae $t(entity.playlist_other) tai tyyppiä luodaksesi uuden"
+            "title": "lisää soittolistalle $t(entity.playlist, {\"count\": 1})",
+            "input_playlists": "$t(entity.playlist, {\"count\": 2})",
+            "create": "luo $t(entity.playlist, {\"count\": 1}) {{playlist}}",
+            "searchOrCreate": "hae $t(entity.playlist, {\"count\": 2}) tai tyyppiä luodaksesi uuden"
         },
         "updateServer": {
             "success": "palvelin on päivitetty onnistuneesti",
             "title": "päivitä palvelin"
         },
         "deletePlaylist": {
-            "success": "$t(entity.playlist_one) poistettu onnistuneesti",
-            "title": "poista $t(entity.playlist_one)",
-            "input_confirm": "kirjoita soittolistan $t(entity.playlist_one) nimi vahvistaaksesi"
+            "success": "$t(entity.playlist, {\"count\": 1}) poistettu onnistuneesti",
+            "title": "poista $t(entity.playlist, {\"count\": 1})",
+            "input_confirm": "kirjoita soittolistan $t(entity.playlist, {\"count\": 1}) nimi vahvistaaksesi"
         },
         "editPlaylist": {
-            "success": "$t(entity.playlist_one) päivitetty onnistuneesti",
-            "title": "muokkaa $t(entity.playlist_one)",
-            "publicJellyfinNote": "Jellyfin ei jostain syystä kerro onko soittolista julkinen vai ei. Jos haluat sen pysyvän julkisena, pidä seuraava valinta valittuna"
+            "success": "$t(entity.playlist, {\"count\": 1}) päivitetty onnistuneesti",
+            "title": "muokkaa $t(entity.playlist, {\"count\": 1})",
+            "publicJellyfinNote": "Jellyfin ei jostain syystä kerro onko soittolista julkinen vai ei. Jos haluat sen pysyvän julkisena, pidä seuraava valinta valittuna",
+            "editNote": "manuaalisia muokkauksia ei suositella suurille soittolistoille. haluatko varmasti hyväksyä riskin, että nykyinen soittolista ylikirjoitetaan ja tietoja voi hävitä?"
         },
         "lyricSearch": {
-            "input_artist": "$t(entity.artist_one)",
+            "input_artist": "$t(entity.artist, {\"count\": 1})",
             "input_name": "$t(common.name)",
             "title": "sanojen haku"
         },
@@ -292,17 +346,53 @@
             "description": "kuvaus",
             "setExpiration": "aseta vanheneminen",
             "success": "jakolinkki kopioitu leikepöydälle (tai klikkaa tästä avataksesi)",
-            "expireInvalid": "vanhetumisen pitää olla tulevaisuudessa"
+            "expireInvalid": "vanhetumisen pitää olla tulevaisuudessa",
+            "copyToClipboard": "Kopioi leikepöydälle: Ctrl+C, Enter",
+            "successMustClick": "jako luotu onnistuneesti. paina tästä avataksesi"
         },
         "queryEditor": {
             "input_optionMatchAny": "sovita joku",
             "input_optionMatchAll": "sovita kaikki",
-            "title": "kyselyeditori"
+            "title": "kyselyeditori",
+            "addRuleGroup": "lisää sääntöryhmä",
+            "removeRuleGroup": "poista sääntöryhmä",
+            "resetToDefault": "palauta oletukset",
+            "clearFilters": "poista suodattimet"
         },
         "privateMode": {
             "enabled": "yksityinen tila käytössä, toistotila on nyt piilotettu ulkoisilta integraatioilta",
             "disabled": "yksityinen tila poissa käytössä, toistotila on nyt näkyvillä ulkoisille integraatioille",
             "title": "yksityinen tila"
+        },
+        "largeFetchConfirmation": {
+            "title": "lisää kohteet jonoon",
+            "description": "lisää kaikki suodatetun näkymän kohteet"
+        },
+        "createRadioStation": {
+            "success": "radiokanava luotu onnistuneesti",
+            "title": "luo radiokanava",
+            "input_homepageUrl": "kotisivun osoite",
+            "input_name": "nimi",
+            "input_streamUrl": "suoratoisto-osoite"
+        },
+        "lyricsExport": {
+            "export": "vie sanoitukset",
+            "input_synced": "vie ajastetut sanoitukset",
+            "input_offset": "$t(setting.lyricOffset)"
+        },
+        "saveQueue": {
+            "success": "toistojono tallennettu palvelimelle"
+        },
+        "shuffleAll": {
+            "title": "soita satunnainen",
+            "input_genre": "$t(entity.genre, {\"count\": 1})",
+            "input_limit": "kuinka monta kappaletta?",
+            "input_minYear": "vuodesta",
+            "input_maxYear": "vuoteen",
+            "input_played": "toiston suodatin",
+            "input_played_optionAll": "kaikki raidat",
+            "input_played_optionUnplayed": "vain toistamattomat raidat",
+            "input_played_optionPlayed": "vain toistetut raidat"
         }
     },
     "setting": {
@@ -374,7 +464,6 @@
         "customCss_description": "mukautettu CSS-sisältö. Huomautus: content- ja etä-URL-osoitteet ovat estettyjä ominaisuuksia. Esikatselu sisällöstäsi on alla. Lisäkenttiä, joita et ole määrittänyt, on näkyvissä puhdistuksen vuoksi",
         "customCssNotice": "Varoitus: vaikka jonkinlainen puhdistus onkin tehty (url()- ja content:-komentojen estäminen), mukautetun css:n käyttäminen voi silti aiheuttaa riskejä muuttamalla käyttöliittymää",
         "disableLibraryUpdateOnStartup": "poista uusimman version tarkistus käynnistyksen yhteydessä käytöstä",
-        "disableAutomaticUpdates": "poista automaattiset päivitykset käytöstä",
         "discordIdleStatus": "näytä rich presencen käyttämätön tila",
         "discordIdleStatus_description": "kun käytössä, päivitä tila kun soitin on käyttämättömänä",
         "discordUpdateInterval_description": "päivitysväli sekunnteina (vähintään 15 sekunttia)",
@@ -437,7 +526,7 @@
         "gaplessAudio": "tauoton toisto",
         "transcodeFormat_description": "valitsee transkoodattavan formaatin. jätä tyhjäksi palvelimen valintaa varten",
         "replayGainMode_optionNone": "$t(common.none)",
-        "replayGainMode_optionTrack": "$t(entity.track_one)",
+        "replayGainMode_optionTrack": "$t(entity.track, {\"count\": 1})",
         "themeDark": "teema (tumma)",
         "translationApiKey_description": "API-avain käännöstä varten (tukee vain globaalia palvelun palvelupistettä)",
         "playbackStyle_description": "valitse toiston tyyli, jota käytetään soittimessa",
@@ -474,7 +563,7 @@
         "replayGainClipping": "{{ReplayGain}} leikkaus",
         "replayGainClipping_description": "Estää {{ReplayGain}}n aiheuttaman leikkauksen laskemalla vahvistusta automaatisesti",
         "replayGainFallback": "{{ReplayGain}} palautus",
-        "replayGainMode_optionAlbum": "$t(entity.album_one)",
+        "replayGainMode_optionAlbum": "$t(entity.album, {\"count\": 1})",
         "replayGainPreamp": "{{ReplayGain}} esivahvistus (dB)",
         "scrobble_description": "skrobblaa toistot mediapalvelimellesi",
         "replayGainPreamp_description": "säätää esivahvistuksen määrää {{ReplayGain}} arvoon",
@@ -540,7 +629,12 @@
         "releaseChannel_optionLatest": "viimeisin",
         "releaseChannel": "julkaisulinja",
         "releaseChannel_description": "valitse vakaiden ja beetaversioiden välillä automaattisille päivityksille",
-        "discordDisplayType_artistname": "artistin nimi / artistien nimet"
+        "discordDisplayType_artistname": "artistin nimi / artistien nimet",
+        "autoDJ": "auto DJ",
+        "autoDJ_description": "lisää automaattisesti samanlaisia kappaleita jonoon",
+        "autoDJ_itemCount": "kohteiden määrä",
+        "autoDJ_itemCount_description": "jonoon lisättäväksi yritettyjen kohteiden määrä, kun auto DJ on käytössä",
+        "autoDJ_timing": "ajastus"
     },
     "page": {
         "itemDetail": {
@@ -549,31 +643,35 @@
             "openFile": "näytä kappale tiedostonhallinnassa"
         },
         "albumArtistList": {
-            "title": "$t(entity.albumArtist_other)"
+            "title": "$t(entity.albumArtist, {\"count\": 2})"
         },
         "albumDetail": {
-            "moreFromArtist": "siirrä kohteesta $t(entity.artist_one)",
+            "moreFromArtist": "siirrä kohteesta $t(entity.artist, {\"count\": 1})",
             "moreFromGeneric": "listää kohteesta {{item}}",
             "released": "julkaistu"
         },
         "albumList": {
             "artistAlbums": "artistin {{artist}} albumit",
-            "genreAlbums": "\"{{genre}}\"$t(entity.album_other)",
-            "title": "$t(entity.album_other)"
+            "genreAlbums": "\"{{genre}}\"$t(entity.album, {\"count\": 2})",
+            "title": "$t(entity.album, {\"count\": 2})"
         },
         "appMenu": {
             "goBack": "mene takaisin",
             "openBrowserDevtools": "avaa selaimen kehitystyökalut",
             "quit": "$t(common.quit)",
             "selectServer": "valitse palvelin",
-            "settings": "$t(common.setting_other)",
+            "settings": "$t(common.setting, {\"count\": 2})",
             "expandSidebar": "laajenna sivupalkki",
             "goForward": "mene eteenpäin",
             "manageServers": "hallitse palvelimia",
             "collapseSidebar": "kutista sivupalkki",
             "version": "versio {{version}}",
             "privateModeOff": "käännä yksityinen tila pois käytöstä",
-            "privateModeOn": "käännä yksityinen tila käyttöön"
+            "privateModeOn": "käännä yksityinen tila käyttöön",
+            "commandPalette": "avaa komentopaletti",
+            "selectMusicFolder": "valitse musiikkikansio",
+            "noMusicFolder": "musiikkikansiota ei ole valittu",
+            "multipleMusicFolders": "{{count}} musiikkikansio(ta) valittu"
         },
         "contextMenu": {
             "playSimilarSongs": "$t(player.playSimilarSongs)",
@@ -598,30 +696,53 @@
             "addLast": "$t(player.addLast)",
             "moveToNext": "$t(action.moveToNext)",
             "removeFromQueue": "$t(action.removeFromQueue)",
-            "goToAlbum": "mene $t(entity.album_one)",
-            "goToAlbumArtist": "mene $t(entity.albumArtist_one)"
+            "goToAlbum": "mene $t(entity.album, {\"count\": 1})",
+            "goToAlbumArtist": "mene $t(entity.albumArtist, {\"count\": 1})",
+            "moveItems": "$t(action.moveItems)",
+            "goTo": "mene"
         },
         "sidebar": {
-            "albumArtists": "$t(entity.albumArtist_other)",
-            "albums": "$t(entity.album_other)",
-            "settings": "$t(common.setting_other)",
-            "shared": "$t(entity.playlist_other) jaettu",
-            "tracks": "$t(entity.track_other)",
-            "artists": "$t(entity.artist_other)",
-            "folders": "$t(entity.folder_other)",
-            "genres": "$t(entity.genre_other)",
+            "albumArtists": "$t(entity.albumArtist, {\"count\": 2})",
+            "albums": "$t(entity.album, {\"count\": 2})",
+            "settings": "$t(common.setting, {\"count\": 2})",
+            "shared": "$t(entity.playlist, {\"count\": 2}) jaettu",
+            "tracks": "$t(entity.track, {\"count\": 2})",
+            "artists": "$t(entity.artist, {\"count\": 2})",
+            "folders": "$t(entity.folder, {\"count\": 2})",
+            "genres": "$t(entity.genre, {\"count\": 2})",
             "home": "$t(common.home)",
             "nowPlaying": "nyt soi",
-            "playlists": "$t(entity.playlist_other)",
+            "playlists": "$t(entity.playlist, {\"count\": 2})",
             "search": "$t(common.search)",
-            "myLibrary": "oma kirjasto"
+            "myLibrary": "oma kirjasto",
+            "collections": "kokoelmat",
+            "favorites": "$t(entity.favorite, {\"count\": 2})",
+            "radio": "$t(entity.radioStation, {\"count\": 2})"
         },
         "setting": {
             "generalTab": "yleinen",
             "windowTab": "ikkuna",
             "hotkeysTab": "pikanäppäimet",
             "playbackTab": "toisto",
-            "advanced": "edistyneet"
+            "advanced": "edistyneet",
+            "analytics": "tilastot",
+            "updates": "päivitä",
+            "cache": "välimuisti",
+            "application": "aplikaatio",
+            "queryBuilder": "kyselynrakentaja",
+            "theme": "teema",
+            "controls": "säätimet",
+            "sidebar": "sivupalkki",
+            "remote": "kauko-ohjain",
+            "exportImport": "tuo/vie",
+            "scrobble": "scrobblata",
+            "audio": "audio",
+            "lyrics": "sanat",
+            "lyricsDisplay": "sanojen näyttö",
+            "transcoding": "transkoodaus",
+            "discord": "discord",
+            "logger": "lokittaja",
+            "playerFilters": "soittimen suodattimet"
         },
         "fullscreenPlayer": {
             "upNext": "seuraavaksi",
@@ -647,9 +768,9 @@
             "related": "liittyvät"
         },
         "genreList": {
-            "showAlbums": "näytä $t(entity.genre_one) $t(entity.album_other)",
-            "showTracks": "näytä $t(entity.genre_one) $t(entity.track_other)",
-            "title": "$t(entity.genre_other)"
+            "showAlbums": "näytä $t(entity.genre, {\"count\": 1}) $t(entity.album, {\"count\": 2})",
+            "showTracks": "näytä $t(entity.genre, {\"count\": 1}) $t(entity.track, {\"count\": 2})",
+            "title": "$t(entity.genre, {\"count\": 2})"
         },
         "globalSearch": {
             "commands": {
@@ -665,21 +786,28 @@
             "title": "$t(common.home)",
             "mostPlayed": "eniten soitetut",
             "newlyAdded": "hiljattain lisätyt julkaisut",
-            "recentlyReleased": "hiljattain julkaistu"
+            "recentlyReleased": "hiljattain julkaistu",
+            "genres": "$t(entity.genre, {\"count\": 2})"
         },
         "albumArtistDetail": {
-            "about": "{{artist}}{sta/stä",
+            "about": "{{artist}}",
             "viewDiscography": "katsele diskografiaa",
-            "relatedArtists": "liittyvät $t(entity.artist_other)",
+            "relatedArtists": "liittyvät $t(entity.artist, {\"count\": 2})",
             "appearsOn": "esiintyy",
             "topSongs": "parhaat kappaleet",
             "topSongsFrom": "parhaat kappaleet albumilta {{title}}",
             "recentReleases": "hiljattaiset julkaisut",
             "viewAll": "katsele kaikkia",
-            "viewAllTracks": "katsele kaikkia $t(entity.track_other)"
+            "viewAllTracks": "katsele kaikkia $t(entity.track, {\"count\": 2})",
+            "favoriteSongs": "suosikki kappaleet",
+            "groupingTypeAll": "kaikki julkaisun tyypit",
+            "groupingTypePrimary": "ensisijaiset tyypin julkaisut",
+            "topSongsCommunity": "yhteisö",
+            "topSongsPersonal": "henkilökohtainen",
+            "favoriteSongsFrom": "suosikkikappale {{title}}:sta"
         },
         "playlistList": {
-            "title": "$t(entity.playlist_other)"
+            "title": "$t(entity.playlist, {\"count\": 2})"
         },
         "manageServers": {
             "title": "hallitse palvelimia",
@@ -694,13 +822,35 @@
         },
         "trackList": {
             "artistTracks": "artistin {{artist}} kappaleet",
-            "genreTracks": "\"{{genre}}\" $t(entity.track_other)",
-            "title": "$t(entity.track_other)"
+            "genreTracks": "\"{{genre}}\" $t(entity.track, {\"count\": 2})",
+            "title": "$t(entity.track, {\"count\": 2})"
+        },
+        "radioList": {
+            "title": "radiokanavat"
+        },
+        "releasenotes": {
+            "commitsSinceStable": "muutokset {{stable}} verrattuna",
+            "noNewCommits": "ei uusia muutoksia tällä välillä",
+            "noStableReleaseToCompare": "vertailukelpoista vakaata versiota ei löytynyt"
+        },
+        "favorites": {
+            "title": "$t(entity.favorite, {\"count\": 2})"
+        },
+        "windowBar": {
+            "paused": "(Tauotettu) ",
+            "privateMode": "(Yksityinen tila)"
+        },
+        "folderList": {
+            "title": "$t(entity.folder, {\"count\": 2})"
+        },
+        "collections": {
+            "overrideExisting": "syrjäytä olemassa olevat",
+            "saveAsCollection": "tallenna kokoelmana"
         }
     },
     "player": {
-        "addLast": "lisää viimeinen",
-        "addNext": "lisää seuraava",
+        "addLast": "viimeinen",
+        "addNext": "seuraava",
         "favorite": "suosikki",
         "queue_moveToTop": "siirrä valittu alas",
         "queue_remove": "poista valittu",
@@ -719,7 +869,7 @@
         "repeat_all": "kertaa kaikki",
         "playbackFetchCancel": "tämä vie aikaa... sulje ilmoitus peruaksesi",
         "mute": "mykistä",
-        "shuffle": "soita sekoitettuna",
+        "shuffle": "soita (sekoitettuna)",
         "next": "seuraava",
         "play": "toista",
         "playbackFetchInProgress": "ladataan kappaleita…",
@@ -729,7 +879,25 @@
         "playSimilarSongs": "toista samanlaisia kappaleita",
         "repeat_off": "kertaus pois päältä",
         "shuffle_off": "sekoitus pois päältä",
-        "toggleFullscreenPlayer": "vaihda kokoruudun soittimeen"
+        "toggleFullscreenPlayer": "vaihda kokoruudun soittimeen",
+        "addLastShuffled": "viimeinen (sekoitettu)",
+        "addNextShuffled": "seuraava (sekoitettu)",
+        "albumRadio": "albumiradio",
+        "artistRadio": "artistiradio",
+        "holdToShuffle": "pidä sekoittaaksesi",
+        "lyrics": "sanat",
+        "restoreQueueFromServer": "palauta tiedustelu palvelimelta",
+        "saveQueueToServer": "tallenna tiedustelu palvelimelle",
+        "trackRadio": "raitaradio",
+        "sleepTimer": "uniajastin",
+        "sleepTimer_endOfSong": "nykyisen kappaleen loppu",
+        "sleepTimer_minutes": "{{count}} min",
+        "sleepTimer_hours": "{{count}} t",
+        "sleepTimer_custom": "mukautettu",
+        "sleepTimer_off": "pois",
+        "sleepTimer_timeRemaining": "{{time}} jäljellä",
+        "sleepTimer_setCustom": "aseta ajastin",
+        "sleepTimer_cancel": "peruuta ajastin"
     },
     "table": {
         "config": {
@@ -746,14 +914,14 @@
             "label": {
                 "channels": "$t(common.channel_other)",
                 "trackNumber": "raidan numero",
-                "album": "$t(entity.album_one)",
+                "album": "$t(entity.album, {\"count\": 1})",
                 "actions": "$t(common.action_other)",
                 "codec": "$t(common.codec)",
                 "dateAdded": "lisäyspäivämäärä",
                 "owner": "$t(common.owner)",
                 "path": "$t(common.path)",
-                "albumArtist": "$t(entity.albumArtist_one)",
-                "artist": "$t(entity.artist_one)",
+                "albumArtist": "$t(entity.albumArtist, {\"count\": 1})",
+                "artist": "$t(entity.artist, {\"count\": 1})",
                 "discNumber": "levyn numero",
                 "duration": "$t(common.duration)",
                 "favorite": "$t(common.favorite)",
@@ -764,12 +932,12 @@
                 "biography": "$t(common.biography)",
                 "bitrate": "$t(common.bitrate)",
                 "bpm": "$t(common.bpm)",
-                "genre": "$t(entity.genre_one)",
+                "genre": "$t(entity.genre, {\"count\": 1})",
                 "playCount": "toistojen lukumäärä",
                 "rating": "$t(common.rating)",
                 "releaseDate": "julkaisupäivämäärä",
                 "size": "$t(common.size)",
-                "songCount": "$t(entity.track_other)",
+                "songCount": "$t(entity.track, {\"count\": 2})",
                 "title": "$t(common.title)",
                 "year": "$t(common.year)"
             },
@@ -782,7 +950,7 @@
         "column": {
             "releaseYear": "vuosi",
             "bpm": "bpm",
-            "artist": "$t(entity.artist_one)",
+            "artist": "$t(entity.artist, {\"count\": 1})",
             "biography": "biografia",
             "dateAdded": "lisäyspäivämäärä",
             "album": "albumi",
@@ -790,17 +958,17 @@
             "lastPlayed": "viimeksi toistettu",
             "path": "polku",
             "size": "$t(common.size)",
-            "songCount": "$t(entity.track_other)",
+            "songCount": "$t(entity.track, {\"count\": 2})",
             "title": "nimi",
             "trackNumber": "raita",
             "codec": "$t(common.codec)",
             "comment": "kommentti",
-            "albumCount": "$t(entity.album_other)",
+            "albumCount": "$t(entity.album, {\"count\": 2})",
             "bitrate": "bittinopeus",
             "channels": "$t(common.channel_other)",
             "discNumber": "levy",
             "favorite": "suosikki",
-            "genre": "$t(entity.genre_one)",
+            "genre": "$t(entity.genre, {\"count\": 1})",
             "playCount": "toistoja",
             "rating": "arvostelu",
             "releaseDate": "julkaisupäivämäärä"
@@ -808,7 +976,7 @@
     },
     "releaseType": {
         "primary": {
-            "album": "$t(entity.album_one)",
+            "album": "$t(entity.album, {\"count\": 1})",
             "broadcast": "lähetys",
             "ep": "EP",
             "other": "muu",
@@ -828,5 +996,36 @@
             "soundtrack": "elokuvamusiikki",
             "spokenWord": "puhetta"
         }
+    },
+    "datetime": {
+        "minuteShort": "m",
+        "secondShort": "s",
+        "hourShort": "t",
+        "dayShort": "p"
+    },
+    "filterOperator": {
+        "after": "jälkeen",
+        "afterDate": "jälkeen (päivän)",
+        "before": "ennen",
+        "beforeDate": "ennen (päivää)",
+        "contains": "sisältää",
+        "endsWith": "loppuu",
+        "inPlaylist": "on",
+        "inTheLast": "on viimeisenä",
+        "inTheRange": "on välillä",
+        "inTheRangeDate": "on valitulla aikavälillä (päivä)",
+        "is": "on",
+        "isNot": "ei ole",
+        "isGreaterThan": "enemmän kuin",
+        "isLessThan": "vähemmän kuin",
+        "matchesRegex": "vastaa säännöllistä lausetta (regex)",
+        "notContains": "ei sisällä",
+        "notInPlaylist": "ei ole",
+        "notInTheLast": "ei ole viimeisenä",
+        "startsWith": "alkaa"
+    },
+    "queryBuilder": {
+        "standardTags": "standardi tagit",
+        "customTags": "mukautetut tagit"
     }
 }

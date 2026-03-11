@@ -15,14 +15,15 @@ import {
 import { LibraryContainer } from '/@/renderer/features/shared/components/library-container';
 import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library-header-bar';
 import { PageErrorBoundary } from '/@/renderer/features/shared/components/page-error-boundary';
-import { useFastAverageColor, useWaitForColorCalculation } from '/@/renderer/hooks';
-import { useCurrentServer, useGeneralSettings } from '/@/renderer/store';
+import { useFastAverageColor } from '/@/renderer/hooks';
+import { useAlbumBackground, useCurrentServer } from '/@/renderer/store';
+import { Spinner } from '/@/shared/components/spinner/spinner';
 import { LibraryItem } from '/@/shared/types/domain-types';
 
 const AlbumDetailRoute = () => {
     const scrollAreaRef = useRef<HTMLDivElement>(null);
     const headerRef = useRef<HTMLDivElement>(null);
-    const { albumBackground, albumBackgroundBlur } = useGeneralSettings();
+    const { albumBackground, albumBackgroundBlur } = useAlbumBackground();
 
     const { albumId } = useParams() as { albumId: string };
     const server = useCurrentServer();
@@ -31,8 +32,7 @@ const AlbumDetailRoute = () => {
 
     const detailQuery = useQuery({
         ...albumQueries.detail({ query: { id: albumId }, serverId: server?.id }),
-        initialData: location.state?.item,
-        staleTime: 0,
+        placeholderData: location.state?.item,
     });
 
     const imageUrl =
@@ -45,22 +45,15 @@ const AlbumDetailRoute = () => {
     const { background: backgroundColor, isLoading: isColorLoading } = useFastAverageColor({
         id: albumId,
         src: imageUrl,
-        srcLoaded: !detailQuery.isLoading,
+        srcLoaded: true,
     });
 
     const background = backgroundColor;
 
     const showBlurredImage = albumBackground;
 
-    const { isReady } = useWaitForColorCalculation({
-        hasImage: !!imageUrl,
-        isLoading: isColorLoading,
-        routeId: albumId,
-        showBlurredImage,
-    });
-
-    if (!isReady) {
-        return null;
+    if (isColorLoading) {
+        return <Spinner container />;
     }
 
     return (

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useShareItem } from '/@/renderer/features/sharing/mutations/share-item-mutation';
 import { useCurrentServer } from '/@/renderer/store';
+import { getServerUrl } from '/@/renderer/utils/normalize-server-url';
 import { DateTimePicker } from '/@/shared/components/date-time-picker/date-time-picker';
 import { Group } from '/@/shared/components/group/group';
 import { ModalButton } from '/@/shared/components/modal/model-shared';
@@ -69,15 +70,26 @@ export const ShareItemContextModal = ({
                     if (!server) throw new Error('Server not found');
                     if (!_data?.id) throw new Error('Failed to share item');
 
-                    const shareUrl = `${server.url}/share/${_data.id}`;
+                    const serverUrl = getServerUrl(server, true);
+                    if (!serverUrl) throw new Error('Server URL not found');
+                    const shareUrl = `${serverUrl}/share/${_data.id}`;
 
-                    navigator.clipboard.writeText(shareUrl);
+                    const canUseClipboard = navigator.clipboard && window.isSecureContext;
+                    if (canUseClipboard) {
+                        navigator.clipboard.writeText(shareUrl);
+                    }
+
                     toast.success({
-                        autoClose: 5000,
+                        autoClose: canUseClipboard ? 5000 : 15000,
                         id: 'share-item-toast',
-                        message: t('form.shareItem.success', {
-                            postProcess: 'sentenceCase',
-                        }),
+                        message: t(
+                            canUseClipboard
+                                ? 'form.shareItem.success'
+                                : 'form.shareItem.successMustClick',
+                            {
+                                postProcess: 'sentenceCase',
+                            },
+                        ),
                         onClick: (a) => {
                             if (!(a.target instanceof HTMLElement)) return;
 

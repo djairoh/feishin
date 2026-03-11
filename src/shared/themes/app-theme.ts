@@ -13,6 +13,7 @@ import { defaultLight } from '/@/shared/themes/default-light/default-light';
 import { dracula } from '/@/shared/themes/dracula/dracula';
 import { githubDark } from '/@/shared/themes/github-dark/github-dark';
 import { githubLight } from '/@/shared/themes/github-light/github-light';
+import { glassyDark } from '/@/shared/themes/glassy-dark/glassy-dark';
 import { gruvboxDark } from '/@/shared/themes/gruvbox-dark/gruvbox-dark';
 import { gruvboxLight } from '/@/shared/themes/gruvbox-light/gruvbox-light';
 import { highContrastDark } from '/@/shared/themes/high-contrast-dark/high-contrast-dark';
@@ -23,6 +24,9 @@ import { monokai } from '/@/shared/themes/monokai/monokai';
 import { nightOwl } from '/@/shared/themes/night-owl/night-owl';
 import { nord } from '/@/shared/themes/nord/nord';
 import { oneDark } from '/@/shared/themes/one-dark/one-dark';
+import { rosePineDawn } from '/@/shared/themes/rose-pine-dawn/rose-pine-dawn';
+import { rosePineMoon } from '/@/shared/themes/rose-pine-moon/rose-pine-moon';
+import { rosePine } from '/@/shared/themes/rose-pine/rose-pine';
 import { shadesOfPurple } from '/@/shared/themes/shades-of-purple/shades-of-purple';
 import { solarizedDark } from '/@/shared/themes/solarized-dark/solarized-dark';
 import { solarizedLight } from '/@/shared/themes/solarized-light/solarized-light';
@@ -40,6 +44,7 @@ export const appTheme: Record<AppTheme, AppThemeConfiguration> = {
     [AppTheme.DRACULA]: dracula,
     [AppTheme.GITHUB_DARK]: githubDark,
     [AppTheme.GITHUB_LIGHT]: githubLight,
+    [AppTheme.GLASSY_DARK]: glassyDark,
     [AppTheme.GRUVBOX_DARK]: gruvboxDark,
     [AppTheme.GRUVBOX_LIGHT]: gruvboxLight,
     [AppTheme.HIGH_CONTRAST_DARK]: highContrastDark,
@@ -50,6 +55,9 @@ export const appTheme: Record<AppTheme, AppThemeConfiguration> = {
     [AppTheme.NIGHT_OWL]: nightOwl,
     [AppTheme.NORD]: nord,
     [AppTheme.ONE_DARK]: oneDark,
+    [AppTheme.ROSE_PINE]: rosePine,
+    [AppTheme.ROSE_PINE_DAWN]: rosePineDawn,
+    [AppTheme.ROSE_PINE_MOON]: rosePineMoon,
     [AppTheme.SHADES_OF_PURPLE]: shadesOfPurple,
     [AppTheme.SOLARIZED_DARK]: solarizedDark,
     [AppTheme.SOLARIZED_LIGHT]: solarizedLight,

@@ -50,9 +50,14 @@
     object-fit: var(--theme-image-fit);
 }
 
+.radio-image {
+    background: var(--theme-colors-surface);
+    border-radius: var(--theme-radius-md);
+}
+
 .line-item {
     display: inline-block;
-    width: fit-content;
+    width: 100%;
     max-width: 20vw;
     overflow: hidden;
     text-overflow: ellipsis;

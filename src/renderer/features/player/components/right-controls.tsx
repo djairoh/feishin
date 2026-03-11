@@ -1,14 +1,15 @@
 import { t } from 'i18next';
-import { useCallback, WheelEvent } from 'react';
+import { useCallback, useEffect, useState, WheelEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { PopoverPlayQueue } from '/@/renderer/features/now-playing/components/popover-play-queue';
 import { PlayerConfig } from '/@/renderer/features/player/components/player-config';
 import { CustomPlayerbarSlider } from '/@/renderer/features/player/components/playerbar-slider';
+import { SleepTimerButton } from '/@/renderer/features/player/components/sleep-timer-button';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
+import { useSetRating } from '/@/renderer/features/shared/hooks/use-set-rating';
 import { useCreateFavorite } from '/@/renderer/features/shared/mutations/create-favorite-mutation';
 import { useDeleteFavorite } from '/@/renderer/features/shared/mutations/delete-favorite-mutation';
-import { useSetRating } from '/@/renderer/features/shared/mutations/set-rating-mutation';
 import {
     useAppStoreActions,
     useAutoDJSettings,
@@ -21,9 +22,11 @@ import {
     usePlayerSong,
     usePlayerVolume,
     useSetFullScreenPlayerStore,
-    useSettingsStore,
     useSettingsStoreActions,
     useSidebarRightExpanded,
+    useSideQueueType,
+    useVolumeWheelStep,
+    useVolumeWidth,
 } from '/@/renderer/store';
 import { useFullScreenPlayerStoreActions } from '/@/renderer/store/full-screen-player.store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
@@ -34,6 +37,7 @@ import { Rating } from '/@/shared/components/rating/rating';
 import { useHotkeys } from '/@/shared/hooks/use-hotkeys';
 import { useMediaQuery } from '/@/shared/hooks/use-media-query';
 import { useThrottledCallback } from '/@/shared/hooks/use-throttled-callback';
+import { useThrottledValue } from '/@/shared/hooks/use-throttled-value';
 import { LibraryItem, QueueSong, ServerType } from '/@/shared/types/domain-types';
 
 const calculateVolumeUp = (volume: number, volumeWheelStep: number) => {
@@ -61,13 +65,15 @@ const calculateVolumeDown = (volume: number, volumeWheelStep: number) => {
 };
 
 export const RightControls = () => {
+    const { showRatings } = useGeneralSettings();
     return (
         <Flex align="flex-end" direction="column" h="100%" px="1rem" py="0.5rem">
             <Group h="calc(100% / 3)">
-                <RatingButton />
+                {showRatings && <RatingButton />}
                 <AutoDJButton />
             </Group>
             <Group align="center" gap="xs" wrap="nowrap">
+                <SleepTimerButton />
                 <PlayerConfig />
                 <LyricsButton />
                 <FavoriteButton />
@@ -95,7 +101,10 @@ const AutoDJButton = () => {
 
     return (
         <Button
-            onClick={toggleAutoDJ}
+            onClick={(e) => {
+                e.stopPropagation();
+                toggleAutoDJ();
+            }}
             size="compact-xs"
             style={{ color: settings.enabled ? 'var(--theme-colors-primary)' : undefined }}
             uppercase
@@ -110,12 +119,22 @@ const QueueButton = () => {
     const { t } = useTranslation();
     const isSidebarRightExpanded = useSidebarRightExpanded();
     const { setSideBar } = useAppStoreActions();
-    const { sideQueueType } = useGeneralSettings();
+    const sideQueueType = useSideQueueType();
 
     const { bindings } = useHotkeySettings();
 
+    const [popoverOpened, setPopoverOpened] = useState(false);
+
     const handleToggleQueue = () => {
-        setSideBar({ rightExpanded: !isSidebarRightExpanded });
+        if (sideQueueType === 'sideQueue') {
+            setSideBar({ rightExpanded: !isSidebarRightExpanded });
+        } else {
+            setPopoverOpened((prev) => !prev);
+        }
+    };
+
+    const handlePopoverClose = () => {
+        setPopoverOpened(false);
     };
 
     useHotkeys([
@@ -148,7 +167,16 @@ const QueueButton = () => {
         );
     }
 
-    return <PopoverPlayQueue />;
+    return (
+        <PopoverPlayQueue
+            onClose={handlePopoverClose}
+            onToggle={(e) => {
+                e.stopPropagation();
+                handleToggleQueue();
+            }}
+            opened={popoverOpened}
+        />
+    );
 };
 
 const LyricsButton = () => {
@@ -303,7 +331,7 @@ const useFavoritePreviousSongHotkeys = ({
 const RatingButton = () => {
     const server = useCurrentServer();
     const currentSong = usePlayerSong();
-    const updateRatingMutation = useSetRating({});
+    const setRating = useSetRating();
 
     const isSongDefined = Boolean(currentSong?.id);
     const showRating =
@@ -313,14 +341,7 @@ const RatingButton = () => {
     const handleUpdateRating = (rating: number) => {
         if (!currentSong) return;
 
-        updateRatingMutation.mutate({
-            apiClientProps: { serverId: currentSong?._serverId || '' },
-            query: {
-                id: [currentSong.id],
-                rating,
-                type: LibraryItem.SONG,
-            },
-        });
+        setRating(currentSong._serverId, [currentSong.id], LibraryItem.SONG, rating);
     };
 
     const { bindings } = useHotkeySettings();
@@ -351,25 +372,36 @@ const VolumeButton = () => {
     const { bindings } = useHotkeySettings();
     const volume = usePlayerVolume();
     const muted = usePlayerMuted();
-    const { volumeWheelStep } = useGeneralSettings();
-    const volumeWidth = useSettingsStore((state) => state.general.volumeWidth);
-    const { mediaToggleMute, setVolume } = usePlayer();
+    const volumeWheelStep = useVolumeWheelStep();
+    const volumeWidth = useVolumeWidth();
+    const { decreaseVolume, increaseVolume, mediaToggleMute, setVolume } = usePlayer();
     const isMinWidth = useMediaQuery('(max-width: 480px)');
 
+    const [sliderValue, setSliderValue] = useState(volume);
+
+    const throttledVolume = useThrottledValue(sliderValue, 100);
+
+    // Sync throttled value to actual volume
+    useEffect(() => {
+        setVolume(throttledVolume);
+    }, [throttledVolume, setVolume]);
+
+    // Sync external volume changes to local state
+    useEffect(() => {
+        setSliderValue(volume);
+    }, [volume]);
+
     const handleVolumeDown = useCallback(() => {
-        setVolume(Math.max(0, volume - 1));
-    }, [setVolume, volume]);
+        decreaseVolume(volumeWheelStep);
+    }, [decreaseVolume, volumeWheelStep]);
 
     const handleVolumeUp = useCallback(() => {
-        setVolume(Math.min(100, volume + 1));
-    }, [setVolume, volume]);
+        increaseVolume(volumeWheelStep);
+    }, [increaseVolume, volumeWheelStep]);
 
-    const handleVolumeSlider = useCallback(
-        (e: number) => {
-            setVolume(e);
-        },
-        [setVolume],
-    );
+    const handleVolumeSlider = useCallback((e: number) => {
+        setSliderValue(e);
+    }, []);
 
     const handleMute = useCallback(() => {
         mediaToggleMute();
@@ -389,8 +421,8 @@ const VolumeButton = () => {
         [setVolume, volume, volumeWheelStep],
     );
 
-    const handleVolumeDownThrottled = useThrottledCallback(handleVolumeDown, 50);
-    const handleVolumeUpThrottled = useThrottledCallback(handleVolumeUp, 50);
+    const handleVolumeDownThrottled = useThrottledCallback(handleVolumeDown, 100);
+    const handleVolumeUpThrottled = useThrottledCallback(handleVolumeUp, 100);
 
     useHotkeys([
         [bindings.volumeDown.isGlobal ? '' : bindings.volumeDown.hotkey, handleVolumeDownThrottled],
@@ -423,9 +455,12 @@ const VolumeButton = () => {
                     max={100}
                     min={0}
                     onChange={handleVolumeSlider}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                    }}
                     onWheel={handleVolumeWheel}
                     size={6}
-                    value={volume}
+                    value={sliderValue}
                     w={volumeWidth}
                 />
             ) : null}

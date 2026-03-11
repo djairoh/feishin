@@ -24,14 +24,18 @@ import { MobileFullscreenPlayerControls } from '/@/renderer/features/player/comp
 import { MobileFullscreenPlayerHeader } from '/@/renderer/features/player/components/mobile-fullscreen-player-header';
 import { MobileFullscreenPlayerMetadata } from '/@/renderer/features/player/components/mobile-fullscreen-player-metadata';
 import { MobileFullscreenPlayerProgress } from '/@/renderer/features/player/components/mobile-fullscreen-player-progress';
-import { useCreateFavorite } from '/@/renderer/features/shared/mutations/create-favorite-mutation';
-import { useDeleteFavorite } from '/@/renderer/features/shared/mutations/delete-favorite-mutation';
-import { useSetRating } from '/@/renderer/features/shared/mutations/set-rating-mutation';
+import {
+    useIsRadioActive,
+    useRadioPlayer,
+} from '/@/renderer/features/radio/hooks/use-radio-player';
+import { useSetFavorite } from '/@/renderer/features/shared/hooks/use-set-favorite';
+import { useSetRating } from '/@/renderer/features/shared/hooks/use-set-rating';
 import { useFastAverageColor } from '/@/renderer/hooks';
 import {
     useCurrentServer,
     useFullScreenPlayerStore,
     useFullScreenPlayerStoreActions,
+    useGeneralSettings,
     usePlayerData,
     usePlayerSong,
     useSetFullScreenPlayerStore,
@@ -376,10 +380,15 @@ export const MobileFullscreenPlayer = () => {
         useFullScreenPlayerStore();
     const currentSong = usePlayerSong();
     const { currentSong: currentSongData } = usePlayerData();
+    const isRadioActive = useIsRadioActive();
+    const { isPlaying: isRadioPlaying, metadata: radioMetadata, stationName } = useRadioPlayer();
     const server = useCurrentServer();
-    const addToFavoritesMutation = useCreateFavorite({});
-    const removeFromFavoritesMutation = useDeleteFavorite({});
-    const updateRatingMutation = useSetRating({});
+
+    const isPlayingRadio = isRadioActive && isRadioPlaying;
+    const effectiveDynamicBackground = dynamicBackground && !isPlayingRadio;
+    const setFavorite = useSetFavorite();
+    const { showRatings: showRatingsSetting } = useGeneralSettings();
+    const setRating = useSetRating();
 
     const [isPageHovered, setIsPageHovered] = useState(false);
 
@@ -414,25 +423,9 @@ export const MobileFullscreenPlayer = () => {
             const song = currentSongData;
             if (!song?.id) return;
 
-            if (song.userFavorite) {
-                removeFromFavoritesMutation.mutate({
-                    apiClientProps: { serverId: song?._serverId || '' },
-                    query: {
-                        id: [song.id],
-                        type: LibraryItem.SONG,
-                    },
-                });
-            } else {
-                addToFavoritesMutation.mutate({
-                    apiClientProps: { serverId: song?._serverId || '' },
-                    query: {
-                        id: [song.id],
-                        type: LibraryItem.SONG,
-                    },
-                });
-            }
+            setFavorite(song._serverId, [song.id], LibraryItem.SONG, !song.userFavorite);
         },
-        [currentSongData, addToFavoritesMutation, removeFromFavoritesMutation],
+        [currentSongData, setFavorite],
     );
 
     const handleToggleLyrics = useCallback(() => {
@@ -443,16 +436,9 @@ export const MobileFullscreenPlayer = () => {
         (rating: number) => {
             if (!currentSong?.id) return;
 
-            updateRatingMutation.mutate({
-                apiClientProps: { serverId: currentSong?._serverId || '' },
-                query: {
-                    id: [currentSong.id],
-                    rating,
-                    type: LibraryItem.SONG,
-                },
-            });
+            setRating(currentSong._serverId, [currentSong.id], LibraryItem.SONG, rating);
         },
-        [currentSong, updateRatingMutation],
+        [currentSong, setRating],
     );
 
     const isPlayerState = activeTab !== 'queue' && activeTab !== 'lyrics';
@@ -460,16 +446,17 @@ export const MobileFullscreenPlayer = () => {
     const isLyricsState = activeTab === 'lyrics';
     const isSongDefined = Boolean(currentSong?.id);
     const showRating =
+        showRatingsSetting &&
         isSongDefined &&
         (server?.type === ServerType.NAVIDROME || server?.type === ServerType.SUBSONIC);
 
     return (
         <MobilePlayerContainer
-            dynamicBackground={dynamicBackground}
+            dynamicBackground={effectiveDynamicBackground}
             dynamicIsImage={dynamicIsImage}
         >
             <BackgroundImageOverlay
-                dynamicBackground={dynamicBackground}
+                dynamicBackground={effectiveDynamicBackground}
                 dynamicImageBlur={dynamicImageBlur}
             />
             <motion.div
@@ -492,6 +479,9 @@ export const MobileFullscreenPlayer = () => {
                     currentSong={currentSong}
                     onToggleFavorite={handleToggleFavorite}
                     onUpdateRating={handleUpdateRating}
+                    radioArtist={isPlayingRadio ? (radioMetadata?.artist ?? undefined) : undefined}
+                    radioStationName={isPlayingRadio ? (stationName ?? undefined) : undefined}
+                    radioTitle={isPlayingRadio ? (radioMetadata?.title ?? undefined) : undefined}
                     showRating={showRating}
                 />
                 <MobileFullscreenPlayerProgress currentSong={currentSong} />
@@ -505,62 +495,72 @@ export const MobileFullscreenPlayer = () => {
                 />
             </motion.div>
 
-            <motion.div
-                animate={{
-                    opacity: isQueueState ? 1 : 0,
-                    zIndex: isQueueState ? 2 : 1,
-                }}
-                className={styles.queueState}
-                transition={{ duration: 0.3, ease: 'easeInOut' }}
-            >
-                <div className={styles.queueHeader}>
-                    <ActionIcon
-                        icon="arrowDownS"
-                        onClick={handleToggleFullScreenPlayer}
-                        size="sm"
-                        variant={isPageHovered ? 'default' : 'subtle'}
-                    />
-                    <ActionIcon
-                        icon="x"
-                        iconProps={{ size: 'xl' }}
-                        onClick={handleToggleQueue}
-                        size="sm"
-                        variant={isPageHovered ? 'default' : 'subtle'}
-                    />
-                </div>
-                <div className={styles.queueContent}>
-                    <PlayQueue listKey={ItemListKey.FULL_SCREEN} searchTerm={undefined} />
-                </div>
-            </motion.div>
+            <AnimatePresence>
+                {isQueueState && (
+                    <motion.div
+                        animate={{ opacity: 1 }}
+                        className={styles.queueState}
+                        exit={{ opacity: 0 }}
+                        initial={{ opacity: 0 }}
+                        style={{ zIndex: 2 }}
+                        transition={{ duration: 0.3, ease: 'easeInOut' }}
+                    >
+                        <div className={styles.queueHeader}>
+                            <ActionIcon
+                                icon="arrowDownS"
+                                onClick={handleToggleFullScreenPlayer}
+                                size="sm"
+                                variant={isPageHovered ? 'default' : 'subtle'}
+                            />
+                            <ActionIcon
+                                icon="x"
+                                iconProps={{ size: 'xl' }}
+                                onClick={handleToggleQueue}
+                                size="sm"
+                                variant={isPageHovered ? 'default' : 'subtle'}
+                            />
+                        </div>
+                        <div className={styles.queueContent}>
+                            <PlayQueue listKey={ItemListKey.FULL_SCREEN} searchTerm={undefined} />
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
-            <motion.div
-                animate={{
-                    opacity: isLyricsState ? 1 : 0,
-                    zIndex: isLyricsState ? 2 : 1,
-                }}
-                className={styles.lyricsState}
-                transition={{ duration: 0.3, ease: 'easeInOut' }}
-            >
-                <div className={styles.lyricsHeader}>
-                    <ActionIcon
-                        icon="arrowDownS"
-                        onClick={handleToggleFullScreenPlayer}
-                        size="sm"
-                        variant={isPageHovered ? 'default' : 'subtle'}
-                    />
-                    <Text fw={600} size="lg">
-                        {t('page.fullscreenPlayer.lyrics', { postProcess: 'sentenceCase' })}
-                    </Text>
-                    <ActionIcon
-                        icon="x"
-                        iconProps={{ size: 'xl' }}
-                        onClick={handleToggleLyrics}
-                        size="sm"
-                        variant={isPageHovered ? 'default' : 'subtle'}
-                    />
-                </div>
-                <div className={styles.lyricsContent}>{isLyricsState && <Lyrics />}</div>
-            </motion.div>
+            <AnimatePresence>
+                {isLyricsState && (
+                    <motion.div
+                        animate={{ opacity: 1 }}
+                        className={styles.lyricsState}
+                        exit={{ opacity: 0 }}
+                        initial={{ opacity: 0 }}
+                        style={{ zIndex: 2 }}
+                        transition={{ duration: 0.3, ease: 'easeInOut' }}
+                    >
+                        <div className={styles.lyricsHeader}>
+                            <ActionIcon
+                                icon="arrowDownS"
+                                onClick={handleToggleFullScreenPlayer}
+                                size="sm"
+                                variant={isPageHovered ? 'default' : 'subtle'}
+                            />
+                            <Text fw={600} size="lg">
+                                {t('page.fullscreenPlayer.lyrics', { postProcess: 'sentenceCase' })}
+                            </Text>
+                            <ActionIcon
+                                icon="x"
+                                iconProps={{ size: 'xl' }}
+                                onClick={handleToggleLyrics}
+                                size="sm"
+                                variant={isPageHovered ? 'default' : 'subtle'}
+                            />
+                        </div>
+                        <div className={styles.lyricsContent}>
+                            <Lyrics />
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </MobilePlayerContainer>
     );
 };

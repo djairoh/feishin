@@ -19,13 +19,7 @@ import {
 import { LogCategory, logFn } from '/@/renderer/utils/logger';
 import { logMsg } from '/@/renderer/utils/logger-message';
 import { LyricSource, ServerType } from '/@/shared/types/domain-types';
-import {
-    FontType,
-    Platform,
-    PlayerQueueType,
-    PlayerStyle,
-    PlayerType,
-} from '/@/shared/types/types';
+import { FontType, Platform, PlayerStyle, PlayerType } from '/@/shared/types/types';
 
 const utils = isElectron() ? window.api.utils : null;
 let appTrackerInFlight = false;
@@ -64,7 +58,6 @@ type AppTrackerProperties = PlayerProperties &
 
 type PlayerProperties = {
     'player.mediaSession': boolean;
-    'player.queueType': PlayerQueueType;
     'player.style': PlayerStyle;
     'player.transcoding': boolean;
     'player.type': PlayerType;
@@ -110,6 +103,7 @@ type SettingsProperties = {
     'settings.themeLight': string;
     'settings.tray': boolean;
     'settings.useThemeAccentColor': boolean;
+    'settings.useThemePrimaryShade': boolean;
     'settings.windowBarStyle': Platform;
     'settings.zoomFactor': number;
 };
@@ -117,7 +111,6 @@ type SettingsProperties = {
 const getPlayerProperties = (): Pick<
     AppTrackerProperties,
     | 'player.mediaSession'
-    | 'player.queueType'
     | 'player.style'
     | 'player.transcoding'
     | 'player.type'
@@ -128,7 +121,6 @@ const getPlayerProperties = (): Pick<
 
     return {
         'player.mediaSession': ignoreWeb(playbackSettings.mediaSession),
-        'player.queueType': player.player.queueType,
         'player.style': player.player.transitionType,
         'player.transcoding': playbackSettings.transcode.enabled,
         'player.type': ignoreWeb(playbackSettings.type),
@@ -201,6 +193,7 @@ const getSettingsProperties = (): SettingsProperties => {
         'settings.themeLight': settings.general.themeLight,
         'settings.tray': ignoreWeb(settings.window.tray),
         'settings.useThemeAccentColor': settings.general.useThemeAccentColor,
+        'settings.useThemePrimaryShade': settings.general.useThemePrimaryShade,
         'settings.windowBarStyle': ignoreWeb(settings.window.windowBarStyle),
         'settings.zoomFactor': ignoreWeb(settings.general.zoomFactor),
     } as any;
@@ -208,8 +201,21 @@ const getSettingsProperties = (): SettingsProperties => {
 
 const getServer = (): 'unknown' | ServerType => {
     const auth = useAuthStore.getState();
+
     const currentServer = auth.currentServer;
-    return currentServer?.type || 'unknown';
+
+    if (currentServer) {
+        return currentServer.type;
+    }
+
+    const serverList = auth.serverList;
+    const server = Object.values(serverList)[0];
+
+    if (server) {
+        return server.type;
+    }
+
+    return 'unknown';
 };
 
 export const useAppTracker = () => {
@@ -221,6 +227,18 @@ export const useAppTracker = () => {
         if (!window.umami || isAnalyticsDisabled()) {
             return;
         }
+
+        const waitForServer = async (): Promise<void> => {
+            if (useAuthStore.getState().currentServer) {
+                return;
+            }
+
+            const pollInterval = 1000 * 60;
+
+            while (!useAuthStore.getState().currentServer) {
+                await new Promise((resolve) => setTimeout(resolve, pollInterval));
+            }
+        };
 
         const getProperties = () => {
             const platform = getPlatform();
@@ -285,8 +303,10 @@ export const useAppTracker = () => {
 
         // Check immediately on mount
         if (!hasRunOnMountRef.current) {
+            waitForServer().then(() => {
+                checkAndTrack();
+            });
             hasRunOnMountRef.current = true;
-            checkAndTrack();
         }
 
         const interval = setInterval(checkAndTrack, 1000 * 60 * 60);
@@ -300,9 +320,11 @@ const appTrackerMutation = mutationOptions({
     mutationFn: (properties: AppTrackerProperties) => {
         try {
             window.umami?.track((props) => ({
-                ...props,
                 data: properties,
+                language: props.language,
                 name: 'app',
+                screen: props.screen,
+                website: props.website,
             }));
             return Promise.resolve();
         } catch (error) {

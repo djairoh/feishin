@@ -8,6 +8,7 @@ import { useItemListScrollPersist } from '/@/renderer/components/item-list/helpe
 import { ItemTableList } from '/@/renderer/components/item-list/item-table-list/item-table-list';
 import { ItemTableListColumn } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { ItemListTableComponentProps } from '/@/renderer/components/item-list/types';
+import { useListContext } from '/@/renderer/context/list-context';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import {
     AlbumListQuery,
@@ -23,6 +24,7 @@ export const AlbumListInfiniteTable = ({
     autoFitColumns = false,
     columns,
     enableAlternateRowColors = false,
+    enableHeader = true,
     enableHorizontalBorders = false,
     enableRowHoverHighlight = true,
     enableSelection = true,
@@ -37,21 +39,23 @@ export const AlbumListInfiniteTable = ({
     size = 'default',
 }: AlbumListInfiniteTableProps) => {
     const listCountQuery = albumQueries.listCount({
-        query: { ...query },
+        query: { ...query, limit: itemsPerPage },
         serverId: serverId,
     }) as UseSuspenseQueryOptions<number, Error, number, readonly unknown[]>;
 
     const listQueryFn = api.controller.getAlbumList;
+    const { pageKey } = useListContext();
 
-    const { data, onRangeChanged } = useItemListInfiniteLoader({
-        eventKey: ItemListKey.ALBUM,
-        itemsPerPage,
-        itemType: LibraryItem.ALBUM,
-        listCountQuery,
-        listQueryFn,
-        query,
-        serverId,
-    });
+    const { getItem, getItemIndex, itemCount, loadedItems, onRangeChanged } =
+        useItemListInfiniteLoader({
+            eventKey: pageKey || ItemListKey.ALBUM,
+            itemsPerPage,
+            itemType: LibraryItem.ALBUM,
+            listCountQuery,
+            listQueryFn,
+            query,
+            serverId,
+        });
 
     const { handleOnScrollEnd, scrollOffset } = useItemListScrollPersist({
         enabled: saveScrollOffset,
@@ -70,16 +74,20 @@ export const AlbumListInfiniteTable = ({
             autoFitColumns={autoFitColumns}
             CellComponent={ItemTableListColumn}
             columns={columns}
-            data={data}
+            data={loadedItems}
             enableAlternateRowColors={enableAlternateRowColors}
+            enableHeader={enableHeader}
             enableHorizontalBorders={enableHorizontalBorders}
             enableRowHoverHighlight={enableRowHoverHighlight}
             enableSelection={enableSelection}
             enableVerticalBorders={enableVerticalBorders}
+            getItem={getItem}
+            getItemIndex={getItemIndex}
             initialTop={{
                 to: scrollOffset ?? 0,
                 type: 'offset',
             }}
+            itemCount={itemCount}
             itemType={LibraryItem.ALBUM}
             onColumnReordered={handleColumnReordered}
             onColumnResized={handleColumnResized}

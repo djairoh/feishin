@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { ssType } from '/@/shared/api/subsonic/subsonic-types';
+import { replacePathPrefix } from '/@/shared/api/utils';
 import {
     Album,
     AlbumArtist,
@@ -20,26 +21,39 @@ const getArtistList = (
     artists?: typeof ssType._response.song._type.artists,
     artistId?: number | string,
     artistName?: string,
+    participants?: null | Record<string, RelatedArtist[]>,
 ) => {
-    return artists
-        ? artists.map((item) => ({
-              id: item.id.toString(),
-              imageId: null,
-              imageUrl: null,
-              name: item.name,
-              userFavorite: false,
-              userRating: null,
-          }))
-        : [
-              {
-                  id: artistId?.toString() || '',
-                  imageId: null,
-                  imageUrl: null,
-                  name: artistName || '',
-                  userFavorite: false,
-                  userRating: null,
-              },
-          ];
+    if (!artists && !participants) {
+        return [
+            {
+                id: artistId?.toString() || '',
+                imageId: null,
+                imageUrl: null,
+                name: artistName || '',
+                userFavorite: false,
+                userRating: null,
+            },
+        ];
+    }
+
+    const result: RelatedArtist[] = [];
+
+    artists?.forEach((item) => {
+        result.push({
+            id: item.id.toString(),
+            imageId: null,
+            imageUrl: null,
+            name: item.name,
+            userFavorite: false,
+            userRating: null,
+        });
+    });
+
+    if (participants?.['remixer']) {
+        result.push(...participants['remixer']);
+    }
+
+    return result;
 };
 
 const getParticipants = (
@@ -117,26 +131,38 @@ const getGenres = (
 const normalizeSong = (
     item: z.infer<typeof ssType._response.song>,
     server?: null | ServerListItemWithCredential,
+    pathReplace?: string,
+    pathReplaceWith?: string,
+    playlistIndex?: number,
+    discTitleMap?: Map<number, string>,
 ): Song => {
+    const participants = getParticipants(item);
+    const albumArtistsList = getArtistList(item.albumArtists, item.artistId, item.artist);
+    const albumArtistName =
+        item.albumArtists?.length > 0
+            ? item.albumArtists.map((a) => a.name).join(', ')
+            : item.artist || '';
+
     return {
         _itemType: LibraryItem.SONG,
         _serverId: server?.id || 'unknown',
         _serverType: ServerType.SUBSONIC,
         album: item.album || '',
-        albumArtists: getArtistList(item.albumArtists, item.artistId, item.artist),
+        albumArtistName,
+        albumArtists: albumArtistsList,
         albumId: item.albumId?.toString() || '',
         artistName: item.artist || '',
-        artists: getArtistList(item.artists, item.artistId, item.artist),
+        artists: getArtistList(item.artists, item.artistId, item.artist, participants),
         bitDepth: item.bitDepth || null,
         bitRate: item.bitRate || 0,
         bpm: item.bpm || null,
         channels: item.channelCount || null,
         comment: null,
         compilation: null,
-        container: item.contentType,
+        container: item.contentType.startsWith('audio/') ? item.contentType.split('/')[1] : null,
         createdAt: item.created,
         discNumber: item.discNumber || 1,
-        discSubtitle: null,
+        discSubtitle: discTitleMap?.get(item.discNumber ?? 1) ?? null,
         duration: item.duration ? item.duration * 1000 : 0,
         explicitStatus:
             item.explicitStatus === 'explicit'
@@ -160,8 +186,8 @@ const normalizeSong = (
         mbzRecordingId: item.musicBrainzId || null,
         mbzTrackId: null,
         name: item.title,
-        participants: getParticipants(item),
-        path: item.path,
+        participants,
+        path: replacePathPrefix(item.path || '', pathReplace, pathReplaceWith),
         peak:
             item.replayGain && (item.replayGain.albumPeak || item.replayGain.trackPeak)
                 ? {
@@ -170,12 +196,15 @@ const normalizeSong = (
                   }
                 : null,
         playCount: item?.playCount || 0,
+        playlistItemId: playlistIndex !== undefined ? playlistIndex.toString() : undefined,
         releaseDate: null,
         releaseYear: item.year || null,
         sampleRate: item.samplingRate || null,
         size: item.size,
+        sortName: item.title,
         tags: null,
         trackNumber: item.track || 1,
+        trackSubtitle: null,
         updatedAt: '',
         userFavorite: Boolean(item.starred) || false,
         userRating: item.userRating || null,
@@ -226,15 +255,44 @@ const normalizeAlbumArtist = (
     };
 };
 
+const PRIMARY_RELEASE_TYPES = ['album', 'ep', 'single', 'broadcast', 'other'];
+
+const getReleaseType = (
+    item: z.infer<typeof ssType._response.album> | z.infer<typeof ssType._response.albumListEntry>,
+) => {
+    if (!item.releaseTypes) {
+        return null;
+    }
+
+    // Return the first primary release type
+    return item.releaseTypes.find((type) => PRIMARY_RELEASE_TYPES.includes(type)) || null;
+};
+
 const normalizeAlbum = (
     item: z.infer<typeof ssType._response.album> | z.infer<typeof ssType._response.albumListEntry>,
     server?: null | ServerListItemWithCredential,
+    pathReplace?: string,
+    pathReplaceWith?: string,
 ): Album => {
+    const discTitleMap = new Map<number, string>();
+
+    (item as z.infer<typeof ssType._response.album>).discTitles?.forEach((discTitle) => {
+        discTitleMap.set(discTitle.disc, discTitle.title);
+    });
+
+    const releaseDate =
+        item.releaseDate &&
+        typeof item.releaseDate.year === 'number' &&
+        typeof item.releaseDate.month === 'number' &&
+        typeof item.releaseDate.day === 'number'
+            ? `${item.releaseDate.year}-${item.releaseDate.month}-${item.releaseDate.day}`
+            : null;
+
     return {
         _itemType: LibraryItem.ALBUM,
         _serverId: server?.id || 'unknown',
         _serverType: ServerType.SUBSONIC,
-        albumArtist: item.artist,
+        albumArtistName: item.artist,
         albumArtists: getArtistList(item.artists, item.artistId, item.artist),
         artists: [],
         comment: null,
@@ -253,30 +311,24 @@ const normalizeAlbum = (
         isCompilation: null,
         lastPlayedAt: null,
         mbzId: null,
+        mbzReleaseGroupId: null,
         name: item.name,
-        originalDate: null,
+        originalDate: releaseDate,
+        originalYear: item.year || null,
         participants: getParticipants(item),
         playCount: null,
         recordLabels: item.recordLabels?.map((item) => item.name) || [],
-        releaseDate:
-            item.releaseDate &&
-            typeof item.releaseDate.year === 'number' &&
-            typeof item.releaseDate.month === 'number' &&
-            typeof item.releaseDate.day === 'number'
-                ? new Date(
-                      item.releaseDate.year,
-                      item.releaseDate.month - 1,
-                      item.releaseDate.day,
-                  ).toISOString()
-                : null,
+        releaseDate,
+        releaseType: getReleaseType(item),
         releaseTypes: item.releaseTypes || [],
         releaseYear: item.year || null,
         size: null,
         songCount: item.songCount,
         songs:
             (item as z.infer<typeof ssType._response.album>).song?.map((song) =>
-                normalizeSong(song, server),
+                normalizeSong(song, server, pathReplace, pathReplaceWith, undefined, discTitleMap),
             ) || [],
+        sortName: item.title,
         tags: null,
         updatedAt: item.created,
         userFavorite: Boolean(item.starred) || false,
@@ -330,6 +382,8 @@ const normalizeGenre = (
 const normalizeFolder = (
     item: z.infer<typeof ssType._response.directory>,
     server?: null | ServerListItemWithCredential,
+    pathReplace?: string,
+    pathReplaceWith?: string,
 ): Folder => {
     const results = item.child?.reduce(
         (acc: { folders: Folder[]; songs: Song[] }, item) => {
@@ -339,7 +393,7 @@ const normalizeFolder = (
                 const folder = normalizeFolder(item, server);
                 acc.folders.push(folder);
             } else {
-                const song = normalizeSong(item, server);
+                const song = normalizeSong(item, server, pathReplace, pathReplaceWith);
                 acc.songs.push(song);
             }
 
@@ -360,6 +414,8 @@ const normalizeFolder = (
             songs: results?.songs || [],
         },
         id: item.id.toString(),
+        imageId: item.coverArt?.toString() || null,
+        imageUrl: null,
         name: item.title,
         parentId: item.parent,
     };

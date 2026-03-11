@@ -1,21 +1,14 @@
 import { lazy, Suspense } from 'react';
 import { HashRouter, Route, Routes } from 'react-router';
 
-import { LyricsSettingsContextModal } from '/@/renderer/features/lyrics/components/lyrics-settings-modal';
-import { ShuffleAllContextModal } from '/@/renderer/features/player/components/shuffle-all-modal';
-import { AddToPlaylistContextModal } from '/@/renderer/features/playlists/components/add-to-playlist-context-modal';
-import { SaveAndReplaceContextModal } from '/@/renderer/features/playlists/components/save-and-replace-context-modal';
-import { UpdatePlaylistContextModal } from '/@/renderer/features/playlists/components/update-playlist-form';
-import { SettingsContextModal } from '/@/renderer/features/settings/components/settings-modal';
 import { RouterErrorBoundary } from '/@/renderer/features/shared/components/router-error-boundary';
-import { ShareItemContextModal } from '/@/renderer/features/sharing/components/share-item-context-modal';
-import { VisualizerSettingsContextModal } from '/@/renderer/features/visualizer/components/audiomotionanalyzer/visualizer-settings-modal';
 import { AuthenticationOutlet } from '/@/renderer/layouts/authentication-outlet';
 import { ResponsiveLayout } from '/@/renderer/layouts/responsive-layout';
 import { AppOutlet } from '/@/renderer/router/app-outlet';
 import { AppRoute } from '/@/renderer/router/routes';
 import { TitlebarOutlet } from '/@/renderer/router/titlebar-outlet';
 import { BaseContextModal, ModalsProvider } from '/@/shared/components/modal/modal';
+import { Spinner } from '/@/shared/components/spinner/spinner';
 
 const NowPlayingRoute = lazy(
     () => import('/@/renderer/features/now-playing/routes/now-playing-route'),
@@ -63,6 +56,10 @@ const AlbumArtistDetailTopSongsListRoute = lazy(
     () => import('../features/artists/routes/album-artist-detail-top-songs-list-route'),
 );
 
+const AlbumArtistDetailFavoriteSongsListRoute = lazy(
+    () => import('../features/artists/routes/album-artist-detail-favorite-songs-list-route'),
+);
+
 const AlbumDetailRoute = lazy(
     () => import('/@/renderer/features/albums/routes/album-detail-route'),
 );
@@ -86,6 +83,108 @@ const SearchRoute = lazy(() => import('/@/renderer/features/search/routes/search
 const FavoritesRoute = lazy(() => import('/@/renderer/features/favorites/routes/favorites-route'));
 
 const SettingsRoute = lazy(() => import('/@/renderer/features/settings/routes/settings-route'));
+
+const LazyLyricsSettingsContextModal = lazy(() =>
+    import('/@/renderer/features/lyrics/components/lyrics-settings-modal').then((module) => ({
+        default: module.LyricsSettingsContextModal,
+    })),
+);
+
+const LyricsSettingsContextModal = (props: any) => (
+    <Suspense fallback={<Spinner container />}>
+        <LazyLyricsSettingsContextModal {...props} />
+    </Suspense>
+);
+
+const LazyShuffleAllContextModal = lazy(() =>
+    import('/@/renderer/features/player/components/shuffle-all-modal').then((module) => ({
+        default: module.ShuffleAllContextModal,
+    })),
+);
+
+const ShuffleAllContextModal = (props: any) => (
+    <Suspense fallback={<Spinner container />}>
+        <LazyShuffleAllContextModal {...props} />
+    </Suspense>
+);
+
+const LazyAddToPlaylistContextModal = lazy(() =>
+    import('/@/renderer/features/playlists/components/add-to-playlist-context-modal').then(
+        (module) => ({
+            default: module.AddToPlaylistContextModal,
+        }),
+    ),
+);
+
+const AddToPlaylistContextModal = (props: any) => (
+    <Suspense fallback={<Spinner container />}>
+        <LazyAddToPlaylistContextModal {...props} />
+    </Suspense>
+);
+
+const LazySaveAndReplaceContextModal = lazy(() =>
+    import('/@/renderer/features/playlists/components/save-and-replace-context-modal').then(
+        (module) => ({
+            default: module.SaveAndReplaceContextModal,
+        }),
+    ),
+);
+
+const SaveAndReplaceContextModal = (props: any) => (
+    <Suspense fallback={<Spinner container />}>
+        <LazySaveAndReplaceContextModal {...props} />
+    </Suspense>
+);
+
+const LazyUpdatePlaylistContextModal = lazy(() =>
+    import('/@/renderer/features/playlists/components/update-playlist-form').then((module) => ({
+        default: module.UpdatePlaylistContextModal,
+    })),
+);
+
+const UpdatePlaylistContextModal = (props: any) => (
+    <Suspense fallback={<Spinner container />}>
+        <LazyUpdatePlaylistContextModal {...props} />
+    </Suspense>
+);
+
+const LazySettingsContextModal = lazy(() =>
+    import('/@/renderer/features/settings/components/settings-modal').then((module) => ({
+        default: module.SettingsContextModal,
+    })),
+);
+
+const SettingsContextModal = (props: any) => (
+    <Suspense fallback={<Spinner container />}>
+        <LazySettingsContextModal {...props} />
+    </Suspense>
+);
+
+const LazyShareItemContextModal = lazy(() =>
+    import('/@/renderer/features/sharing/components/share-item-context-modal').then((module) => ({
+        default: module.ShareItemContextModal,
+    })),
+);
+
+const ShareItemContextModal = (props: any) => (
+    <Suspense fallback={<Spinner container />}>
+        <LazyShareItemContextModal {...props} />
+    </Suspense>
+);
+
+const LazyVisualizerSettingsContextModal = lazy(() =>
+    import(
+        '/@/renderer/features/visualizer/components/audiomotionanalyzer/visualizer-settings-modal'
+    ).then((module) => ({
+        default: module.VisualizerSettingsContextModal,
+    })),
+);
+
+const VisualizerSettingsContextModal = (props: any) => (
+    <Suspense fallback={<Spinner container />}>
+        <LazyVisualizerSettingsContextModal {...props} />
+    </Suspense>
+);
 
 export const AppRouter = () => {
     const router = (
@@ -157,6 +256,14 @@ export const AppRouter = () => {
                                                 element={<AlbumArtistDetailTopSongsListRoute />}
                                                 path={AppRoute.LIBRARY_ARTISTS_DETAIL_TOP_SONGS}
                                             />
+                                            <Route
+                                                element={
+                                                    <AlbumArtistDetailFavoriteSongsListRoute />
+                                                }
+                                                path={
+                                                    AppRoute.LIBRARY_ARTISTS_DETAIL_FAVORITE_SONGS
+                                                }
+                                            />
                                         </Route>
                                         <Route
                                             element={<DummyAlbumDetailRoute />}
@@ -199,6 +306,14 @@ export const AppRouter = () => {
                                                     element={<AlbumArtistDetailTopSongsListRoute />}
                                                     path={
                                                         AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL_TOP_SONGS
+                                                    }
+                                                />
+                                                <Route
+                                                    element={
+                                                        <AlbumArtistDetailFavoriteSongsListRoute />
+                                                    }
+                                                    path={
+                                                        AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL_FAVORITE_SONGS
                                                     }
                                                 />
                                             </Route>

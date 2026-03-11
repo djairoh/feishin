@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useMemo } from 'react';
 
 import styles from './option.module.css';
 
@@ -10,13 +10,22 @@ interface OptionProps extends GroupProps {
     children: ReactNode;
 }
 
-export const Option = ({ children, ...props }: OptionProps) => {
+const defaultClassNames = { root: styles.root };
+
+export const Option = ({ children, classNames, ...props }: OptionProps) => {
+    const mergedClassNames = useMemo(
+        () => (classNames ? { ...defaultClassNames, ...classNames } : defaultClassNames),
+        [classNames],
+    );
+
     return (
-        <Group classNames={{ root: styles.root }} grow {...props}>
+        <Group classNames={mergedClassNames} grow {...props}>
             {children}
         </Group>
     );
 };
+
+Option.displayName = 'Option';
 
 interface LabelProps {
     children: ReactNode;

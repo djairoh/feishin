@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
@@ -13,6 +13,7 @@ import {
     useCurrentServerId,
     usePlayerStore,
     usePlayerStoreBase,
+    useSettingsStore,
 } from '/@/renderer/store';
 import { LogCategory, logFn } from '/@/renderer/utils/logger';
 import { logMsg } from '/@/renderer/utils/logger-message';
@@ -73,7 +74,8 @@ export const useAutoDJ = () => {
                     let uniqueSimilarSongs: Song[] = [];
 
                     const hasMusicFolder = server?.musicFolderId && server.musicFolderId.length > 0;
-                    const trySimilarSongs = hasMusicFolder && hasSimilarSongsMusicFolder;
+                    const trySimilarSongs =
+                        !hasMusicFolder || (hasMusicFolder && hasSimilarSongsMusicFolder);
 
                     // Skip similar songs fetch if a music folder is selected and does not support musicFolderId on similar songs
                     if (trySimilarSongs) {
@@ -230,4 +232,19 @@ export const useAutoDJ = () => {
         settings.itemCount,
         settings.timing,
     ]);
+};
+
+const AutoDJHookInner = () => {
+    useAutoDJ();
+    return null;
+};
+
+export const AutoDJHook = () => {
+    const isAutoDJEnabled = useSettingsStore((state) => state.autoDJ.enabled);
+
+    if (!isAutoDJEnabled) {
+        return null;
+    }
+
+    return React.createElement(AutoDJHookInner);
 };

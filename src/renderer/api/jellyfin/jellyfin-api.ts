@@ -9,6 +9,7 @@ import packageJson from '../../../../package.json';
 import i18n from '/@/i18n/i18n';
 import { authenticationFailure } from '/@/renderer/api/utils';
 import { useAuthStore } from '/@/renderer/store';
+import { getServerUrl } from '/@/renderer/utils/normalize-server-url';
 import { jfType } from '/@/shared/api/jellyfin/jellyfin-types';
 import { getClientType } from '/@/shared/api/utils';
 import { ServerListItemWithCredential } from '/@/shared/types/domain-types';
@@ -136,7 +137,7 @@ export const contract = c.router({
     },
     getInstantMix: {
         method: 'GET',
-        path: 'songs/:itemId/InstantMix',
+        path: 'items/:itemId/InstantMix',
         query: jfType._parameters.similarSongs,
         responses: {
             200: jfType._response.songList,
@@ -245,6 +246,15 @@ export const contract = c.router({
         responses: {
             200: jfType._response.lyrics,
             404: jfType._response.error,
+        },
+    },
+    getStudioList: {
+        method: 'GET',
+        path: 'studios',
+        query: jfType._parameters.studioList,
+        responses: {
+            200: jfType._response.studioList,
+            400: jfType._response.error,
         },
     },
     getTopSongsList: {
@@ -408,7 +418,8 @@ export const jfApiClient = (args: {
             const { params, path: api } = parsePath(path);
 
             if (server) {
-                baseUrl = `${server?.url}`;
+                const serverUrl = getServerUrl(server);
+                baseUrl = serverUrl;
                 token = server?.credential;
             } else {
                 baseUrl = url;

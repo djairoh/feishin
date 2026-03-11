@@ -2,18 +2,24 @@ import type { IpcRendererEvent } from 'electron';
 
 import { t } from 'i18next';
 import isElectron from 'is-electron';
-import { useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import i18n, { languages } from '/@/i18n/i18n';
 import { ImageResolutionSettings } from '/@/renderer/features/settings/components/general/art-resolution-settings';
-import { ArtistSettings } from '/@/renderer/features/settings/components/general/artist-settings';
+import {
+    ArtistReleaseTypeSettings,
+    ArtistSettings,
+} from '/@/renderer/features/settings/components/general/artist-settings';
+import { FullscreenPlayerSettings } from '/@/renderer/features/settings/components/general/fullscreen-player-settings';
 import { HomeSettings } from '/@/renderer/features/settings/components/general/home-settings';
+import { PathSettings } from '/@/renderer/features/settings/components/general/path-settings';
 import {
     SettingOption,
     SettingsSection,
 } from '/@/renderer/features/settings/components/settings-section';
 import {
+    HomeFeatureStyle,
     SideQueueType,
     useFontSettings,
     useGeneralSettings,
@@ -22,6 +28,7 @@ import {
 import { type Font, FONT_OPTIONS } from '/@/renderer/types/fonts';
 import { FileInput } from '/@/shared/components/file-input/file-input';
 import { NumberInput } from '/@/shared/components/number-input/number-input';
+import { SegmentedControl } from '/@/shared/components/segmented-control/segmented-control';
 import { Select } from '/@/shared/components/select/select';
 import { Slider } from '/@/shared/components/slider/slider';
 import { Switch } from '/@/shared/components/switch/switch';
@@ -32,6 +39,23 @@ const localSettings = isElectron() ? window.api.localSettings : null;
 const ipc = isElectron() ? window.api.ipc : null;
 // Electron 32+ removed file.path, use this which is exposed in preload to get real path
 const webUtils = isElectron() ? window.electron.webUtils : null;
+
+const HOME_FEATURE_STYLE_OPTIONS = [
+    {
+        label: t('setting.homeFeatureStyle', {
+            context: 'optionSingle',
+            postProcess: 'sentenceCase',
+        }),
+        value: HomeFeatureStyle.SINGLE,
+    },
+    {
+        label: t('setting.homeFeatureStyle', {
+            context: 'optionMultiple',
+            postProcess: 'sentenceCase',
+        }),
+        value: HomeFeatureStyle.MULTIPLE,
+    },
+];
 
 const SIDE_QUEUE_OPTIONS = [
     {
@@ -74,7 +98,7 @@ if (isElectron()) {
     });
 }
 
-export const ApplicationSettings = () => {
+export const ApplicationSettings = memo(() => {
     const { t } = useTranslation();
     const settings = useGeneralSettings();
     const fontSettings = useFontSettings();
@@ -354,6 +378,29 @@ export const ApplicationSettings = () => {
         },
         {
             control: (
+                <SegmentedControl
+                    aria-label={t('setting.homeFeatureStyle', { postProcess: 'sentenceCase' })}
+                    data={HOME_FEATURE_STYLE_OPTIONS}
+                    defaultValue={settings.homeFeatureStyle}
+                    onChange={(e) =>
+                        setSettings({
+                            general: {
+                                ...settings,
+                                homeFeatureStyle: e as HomeFeatureStyle,
+                            },
+                        })
+                    }
+                />
+            ),
+            description: t('setting.homeFeatureStyle', {
+                context: 'description',
+                postProcess: 'sentenceCase',
+            }),
+            isHidden: false,
+            title: t('setting.homeFeatureStyle', { postProcess: 'sentenceCase' }),
+        },
+        {
+            control: (
                 <Switch
                     aria-label={t('setting.albumBackground', { postProcess: 'sentenceCase' })}
                     defaultChecked={settings.albumBackground}
@@ -578,6 +625,50 @@ export const ApplicationSettings = () => {
         {
             control: (
                 <Switch
+                    aria-label={t('setting.blurExplicitImages', { postProcess: 'sentenceCase' })}
+                    defaultChecked={settings.blurExplicitImages}
+                    onChange={(e) =>
+                        setSettings({
+                            general: {
+                                ...settings,
+                                blurExplicitImages: e.currentTarget.checked,
+                            },
+                        })
+                    }
+                />
+            ),
+            description: t('setting.blurExplicitImages', {
+                context: 'description',
+                postProcess: 'sentenceCase',
+            }),
+            isHidden: false,
+            title: t('setting.blurExplicitImages', { postProcess: 'sentenceCase' }),
+        },
+        {
+            control: (
+                <Switch
+                    aria-label={t('setting.enableGridMultiSelect', { postProcess: 'sentenceCase' })}
+                    defaultChecked={settings.enableGridMultiSelect}
+                    onChange={(e) =>
+                        setSettings({
+                            general: {
+                                ...settings,
+                                enableGridMultiSelect: e.currentTarget.checked,
+                            },
+                        })
+                    }
+                />
+            ),
+            description: t('setting.enableGridMultiSelect', {
+                context: 'description',
+                postProcess: 'sentenceCase',
+            }),
+            isHidden: false,
+            title: t('setting.enableGridMultiSelect', { postProcess: 'sentenceCase' }),
+        },
+        {
+            control: (
+                <Switch
                     aria-label={t('setting.playerbarOpenDrawer', { postProcess: 'sentenceCase' })}
                     defaultChecked={settings.playerbarOpenDrawer}
                     onChange={(e) =>
@@ -597,6 +688,59 @@ export const ApplicationSettings = () => {
             isHidden: false,
             title: t('setting.playerbarOpenDrawer', { postProcess: 'sentenceCase' }),
         },
+        {
+            control: (
+                <Switch
+                    aria-label={t('setting.autosave', { postProcess: 'sentenceCase' })}
+                    defaultChecked={settings.autoSave.enabled}
+                    onChange={(e) => {
+                        setSettings({
+                            general: {
+                                ...settings,
+                                autoSave: {
+                                    ...settings.autoSave,
+                                    enabled: e.currentTarget.checked,
+                                },
+                            },
+                        });
+                    }}
+                />
+            ),
+            description: t('setting.autosave', {
+                context: 'description',
+                postProcess: 'sentenceCase',
+            }),
+            title: t('setting.autosave', { postProcess: 'sentenceCase' }),
+        },
+        {
+            control: (
+                <NumberInput
+                    min={1}
+                    onBlur={(e) => {
+                        if (!e) return;
+                        const newVal = e.currentTarget.value
+                            ? Math.max(Number(e.currentTarget.value), 1)
+                            : settings.autoSave.count;
+                        setSettings({
+                            general: {
+                                ...settings,
+                                autoSave: {
+                                    ...settings.autoSave,
+                                    count: newVal,
+                                },
+                            },
+                        });
+                    }}
+                    value={settings.autoSave.count}
+                />
+            ),
+            description: t('setting.autosaveCount', {
+                context: 'description',
+                postProcess: 'sentenceCase',
+            }),
+            isHidden: !settings.autoSave.enabled,
+            title: t('setting.autosaveCount', { postProcess: 'sentenceCase' }),
+        },
     ];
 
     return (
@@ -606,10 +750,13 @@ export const ApplicationSettings = () => {
                     <ImageResolutionSettings />
                     <HomeSettings />
                     <ArtistSettings />
+                    <ArtistReleaseTypeSettings />
+                    <FullscreenPlayerSettings />
+                    <PathSettings />
                 </>
             }
             options={options}
             title={t('page.setting.application', { postProcess: 'sentenceCase' })}
         />
     );
-};
+});

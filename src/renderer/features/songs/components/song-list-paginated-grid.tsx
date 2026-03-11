@@ -7,7 +7,9 @@ import { ItemGridList } from '/@/renderer/components/item-list/item-grid-list/it
 import { ItemListWithPagination } from '/@/renderer/components/item-list/item-list-pagination/item-list-pagination';
 import { useItemListPagination } from '/@/renderer/components/item-list/item-list-pagination/use-item-list-pagination';
 import { ItemListGridComponentProps } from '/@/renderer/components/item-list/types';
+import { useListContext } from '/@/renderer/context/list-context';
 import { songsQueries } from '/@/renderer/features/songs/api/songs-api';
+import { useGeneralSettings } from '/@/renderer/store';
 import { LibraryItem, SongListQuery, SongListSort, SortOrder } from '/@/shared/types/domain-types';
 import { ItemListKey } from '/@/shared/types/types';
 
@@ -24,18 +26,19 @@ export const SongListPaginatedGrid = ({
     serverId,
     size,
 }: SongListPaginatedGridProps) => {
+    const { pageKey } = useListContext();
+    const { currentPage, onChange } = useItemListPagination();
+
     const listCountQuery = songsQueries.listCount({
-        query: { ...query },
+        query: { ...query, limit: itemsPerPage },
         serverId: serverId,
     }) as UseSuspenseQueryOptions<number, Error, number, readonly unknown[]>;
 
     const listQueryFn = api.controller.getSongList;
 
-    const { currentPage, onChange } = useItemListPagination();
-
     const { data, pageCount, totalItemCount } = useItemListPaginatedLoader({
         currentPage,
-        eventKey: ItemListKey.SONG,
+        eventKey: pageKey || ItemListKey.SONG,
         itemsPerPage,
         itemType: LibraryItem.SONG,
         listCountQuery,
@@ -44,7 +47,8 @@ export const SongListPaginatedGrid = ({
         serverId,
     });
 
-    const rows = useGridRows(LibraryItem.SONG, ItemListKey.SONG);
+    const rows = useGridRows(LibraryItem.SONG, ItemListKey.SONG, size);
+    const { enableGridMultiSelect } = useGeneralSettings();
 
     return (
         <ItemListWithPagination
@@ -57,6 +61,7 @@ export const SongListPaginatedGrid = ({
             <ItemGridList
                 currentPage={currentPage}
                 data={data || []}
+                enableMultiSelect={enableGridMultiSelect}
                 gap={gap}
                 itemsPerRow={itemsPerRow}
                 itemType={LibraryItem.SONG}

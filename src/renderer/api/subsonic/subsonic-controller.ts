@@ -9,6 +9,7 @@ import { z } from 'zod';
 
 import { contract, ssApiClient } from '/@/renderer/api/subsonic/subsonic-api';
 import { randomString } from '/@/renderer/utils';
+import { getServerUrl } from '/@/renderer/utils/normalize-server-url';
 import { ssNormalize } from '/@/shared/api/subsonic/subsonic-normalize';
 import {
     AlbumListSortType,
@@ -19,15 +20,48 @@ import { hasFeature, sortAlbumArtistList, sortAlbumList, sortSongList } from '/@
 import {
     AlbumListSort,
     GenreListSort,
+    ImageArgs,
+    ImageRequest,
     InternalControllerEndpoint,
     LibraryItem,
     PlaylistListSort,
+    ReplaceApiClientProps,
     ServerType,
     Song,
     SongListSort,
     SortOrder,
 } from '/@/shared/types/domain-types';
 import { ServerFeature, ServerFeatures } from '/@/shared/types/features-types';
+
+const getSubsonicImageRequest = ({
+    apiClientProps: { server },
+    baseUrl,
+    query,
+}: ReplaceApiClientProps<ImageArgs>): ImageRequest | null => {
+    const { id, size } = query;
+    const imageSize = size;
+    const url = baseUrl || getServerUrl(server);
+
+    if (!url || !server?.credential) {
+        return null;
+    }
+
+    // Check for default placeholder image ID
+    if (id.match('2a96cbd8b46e442fc41c2b86b821562f')) {
+        return null;
+    }
+
+    return {
+        cacheKey: ['subsonic', server.id, baseUrl || '', id, imageSize || ''].join(':'),
+        url:
+            `${url}/rest/getCoverArt.view` +
+            `?id=${id}` +
+            `&${server.credential}` +
+            '&v=1.13.0' +
+            '&c=Feishin' +
+            (imageSize ? `&size=${imageSize}` : ''),
+    };
+};
 
 const ALBUM_LIST_SORT_MAPPING: Record<AlbumListSort, AlbumListSortType | undefined> = {
     [AlbumListSort.ALBUM_ARTIST]: AlbumListSortType.ALPHABETICAL_BY_ARTIST,
@@ -37,6 +71,7 @@ const ALBUM_LIST_SORT_MAPPING: Record<AlbumListSort, AlbumListSortType | undefin
     [AlbumListSort.DURATION]: undefined,
     [AlbumListSort.EXPLICIT_STATUS]: undefined,
     [AlbumListSort.FAVORITED]: AlbumListSortType.STARRED,
+    [AlbumListSort.ID]: undefined,
     [AlbumListSort.NAME]: AlbumListSortType.ALPHABETICAL_BY_NAME,
     [AlbumListSort.PLAY_COUNT]: AlbumListSortType.FREQUENT,
     [AlbumListSort.RANDOM]: AlbumListSortType.RANDOM,
@@ -45,6 +80,7 @@ const ALBUM_LIST_SORT_MAPPING: Record<AlbumListSort, AlbumListSortType | undefin
     [AlbumListSort.RECENTLY_PLAYED]: AlbumListSortType.RECENT,
     [AlbumListSort.RELEASE_DATE]: AlbumListSortType.BY_YEAR,
     [AlbumListSort.SONG_COUNT]: undefined,
+    [AlbumListSort.SORT_NAME]: AlbumListSortType.ALPHABETICAL_BY_NAME,
     [AlbumListSort.YEAR]: AlbumListSortType.BY_YEAR,
 };
 
@@ -255,12 +291,6 @@ export const SubsonicController: InternalControllerEndpoint = {
     getAlbumArtistDetail: async (args) => {
         const { apiClientProps, query } = args;
 
-        const artistInfoRes = await ssApiClient(apiClientProps).getArtistInfo({
-            query: {
-                id: query.id,
-            },
-        });
-
         const res = await ssApiClient(apiClientProps).getArtist({
             query: {
                 id: query.id,
@@ -273,18 +303,46 @@ export const SubsonicController: InternalControllerEndpoint = {
 
         const artist = res.body.artist;
 
-        let artistInfo;
-        if (artistInfoRes.status === 200) {
-            artistInfo = artistInfoRes.body.artistInfo;
-        }
-
         return {
             ...ssNormalize.albumArtist(artist, apiClientProps.server),
-            albums: artist.album?.map((album) => ssNormalize.album(album, apiClientProps.server)),
+            albums: artist.album?.map((album) =>
+                ssNormalize.album(
+                    album,
+                    apiClientProps.server,
+                    args.context?.pathReplace,
+                    args.context?.pathReplaceWith,
+                ),
+            ),
+            similarArtists: null,
+        };
+    },
+    getAlbumArtistInfo: async (args) => {
+        const { apiClientProps, query } = args;
+
+        const artistInfoRes = await ssApiClient(apiClientProps).getArtistInfo({
+            query: {
+                id: query.id,
+                ...(query.limit != null && { count: query.limit }),
+            },
+        });
+
+        if (artistInfoRes.status !== 200) {
+            return null;
+        }
+
+        const artistInfo = artistInfoRes.body.artistInfo;
+
+        return {
+            biography: artistInfo?.biography || null,
             similarArtists:
-                artistInfo?.similarArtist?.map((artist) =>
-                    ssNormalize.albumArtist(artist, apiClientProps.server),
-                ) || null,
+                artistInfo?.similarArtist?.map((artist) => ({
+                    id: artist.id,
+                    imageId: null,
+                    imageUrl: null,
+                    name: artist.name,
+                    userFavorite: Boolean(artist.starred) || false,
+                    userRating: artist.userRating ?? null,
+                })) ?? null,
         };
     },
     getAlbumArtistList: async (args) => {
@@ -314,19 +372,22 @@ export const SubsonicController: InternalControllerEndpoint = {
             results = searchResults;
         }
 
-        if (query.sortBy) {
-            results = sortAlbumArtistList(results, query.sortBy, query.sortOrder);
+        if (query.favorite) {
+            results = results.filter((artist) => artist.userFavorite);
         }
 
-        return {
-            items: results,
+        return sortAndPaginate(results, {
+            limit: query.limit,
+            sortBy: query.sortBy,
+            sortFn: query.sortBy ? sortAlbumArtistList : undefined,
+            sortOrder: query.sortOrder,
             startIndex: query.startIndex,
-            totalRecordCount: artists.length,
-        };
+        });
     },
     getAlbumArtistListCount: (args) =>
         SubsonicController.getAlbumArtistList({
             ...args,
+            context: args.context,
             query: { ...args.query, startIndex: 0 },
         }).then((res) => res!.totalRecordCount!),
     getAlbumDetail: async (args) => {
@@ -342,7 +403,12 @@ export const SubsonicController: InternalControllerEndpoint = {
             throw new Error('Failed to get album detail');
         }
 
-        return ssNormalize.album(res.body.album, apiClientProps.server);
+        return ssNormalize.album(
+            res.body.album,
+            apiClientProps.server,
+            args.context?.pathReplace,
+            args.context?.pathReplaceWith,
+        );
     },
     getAlbumList: async (args) => {
         const { apiClientProps, query } = args;
@@ -367,7 +433,12 @@ export const SubsonicController: InternalControllerEndpoint = {
 
             const results =
                 res.body.searchResult3?.album?.map((album) =>
-                    ssNormalize.album(album, apiClientProps.server),
+                    ssNormalize.album(
+                        album,
+                        apiClientProps.server,
+                        args.context?.pathReplace,
+                        args.context?.pathReplaceWith,
+                    ),
                 ) || [];
 
             return {
@@ -402,7 +473,14 @@ export const SubsonicController: InternalControllerEndpoint = {
                 return artist.body.artist.album ?? [];
             });
 
-            const items = albums.map((album) => ssNormalize.album(album, apiClientProps.server));
+            const items = albums.map((album) =>
+                ssNormalize.album(
+                    album,
+                    apiClientProps.server,
+                    args.context?.pathReplace,
+                    args.context?.pathReplaceWith,
+                ),
+            );
 
             return {
                 items: sortAlbumList(items, query.sortBy, query.sortOrder),
@@ -424,7 +502,12 @@ export const SubsonicController: InternalControllerEndpoint = {
 
             const allResults =
                 res.body.starred?.album?.map((album) =>
-                    ssNormalize.album(album, apiClientProps.server),
+                    ssNormalize.album(
+                        album,
+                        apiClientProps.server,
+                        args.context?.pathReplace,
+                        args.context?.pathReplaceWith,
+                    ),
                 ) || [];
 
             return sortAndPaginate(allResults, {
@@ -489,7 +572,12 @@ export const SubsonicController: InternalControllerEndpoint = {
         return {
             items:
                 res.body.albumList2.album?.map((album) =>
-                    ssNormalize.album(album, apiClientProps.server),
+                    ssNormalize.album(
+                        album,
+                        apiClientProps.server,
+                        args.context?.pathReplace,
+                        args.context?.pathReplaceWith,
+                    ),
                 ) || [],
             startIndex: query.startIndex,
             totalRecordCount: null,
@@ -639,6 +727,33 @@ export const SubsonicController: InternalControllerEndpoint = {
 
         return totalRecordCount;
     },
+    getAlbumRadio: async (args) => {
+        const { apiClientProps, context, query } = args;
+
+        const res = await ssApiClient(apiClientProps).getSimilarSongs({
+            query: {
+                count: query.count,
+                id: query.albumId,
+            },
+        });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to get album radio songs');
+        }
+
+        if (!res.body.similarSongs?.song) {
+            return [];
+        }
+
+        return res.body.similarSongs.song.map((song) =>
+            ssNormalize.song(
+                song,
+                apiClientProps.server,
+                context?.pathReplace,
+                context?.pathReplaceWith,
+            ),
+        );
+    },
     getArtistList: async (args) => {
         const { apiClientProps, query } = args;
 
@@ -682,10 +797,11 @@ export const SubsonicController: InternalControllerEndpoint = {
     getArtistListCount: async (args) =>
         SubsonicController.getArtistList({
             ...args,
+            context: args.context,
             query: { ...args.query, startIndex: 0 },
         }).then((res) => res!.totalRecordCount!),
     getArtistRadio: async (args) => {
-        const { apiClientProps, query } = args;
+        const { apiClientProps, context, query } = args;
 
         const res = await ssApiClient(apiClientProps).getSimilarSongs2({
             query: {
@@ -703,7 +819,12 @@ export const SubsonicController: InternalControllerEndpoint = {
         }
 
         return res.body.similarSongs2.song.map((song) =>
-            ssNormalize.song(song, apiClientProps.server),
+            ssNormalize.song(
+                song,
+                apiClientProps.server,
+                context?.pathReplace,
+                context?.pathReplaceWith,
+            ),
         );
     },
     getDownloadUrl: (args) => {
@@ -717,10 +838,10 @@ export const SubsonicController: InternalControllerEndpoint = {
             '&c=Feishin'
         );
     },
-    getFolder: async ({ apiClientProps, query }) => {
+    getFolder: async ({ apiClientProps, context, query }) => {
         const sortOrder = (query.sortOrder?.toLowerCase() ?? 'asc') as 'asc' | 'desc';
 
-        const isRootFolderId = /^\d+$/.test(query.id);
+        const isRootFolderId = query.id === '0';
 
         if (isRootFolderId) {
             const res = await ssApiClient(apiClientProps).getIndexes({
@@ -737,6 +858,7 @@ export const SubsonicController: InternalControllerEndpoint = {
                 res.body.indexes?.index?.flatMap((idx) =>
                     idx.artist.map((artist) => ({
                         artist: artist.name,
+                        coverArt: artist.coverArt,
                         id: artist.id.toString(),
                         isDir: true,
                         title: artist.name,
@@ -749,7 +871,14 @@ export const SubsonicController: InternalControllerEndpoint = {
                 });
             }
 
-            let folders = items.map((item) => ssNormalize.folder(item, apiClientProps.server));
+            let folders = items.map((item) =>
+                ssNormalize.folder(
+                    item,
+                    apiClientProps.server,
+                    context?.pathReplace,
+                    context?.pathReplaceWith,
+                ),
+            );
 
             folders = orderBy(folders, [(v) => v.name.toLowerCase()], [sortOrder]);
 
@@ -777,7 +906,12 @@ export const SubsonicController: InternalControllerEndpoint = {
             throw new Error('Failed to get folder');
         }
 
-        const folder = ssNormalize.folder(directoryRes.body.directory, apiClientProps.server);
+        const folder = ssNormalize.folder(
+            directoryRes.body.directory,
+            apiClientProps.server,
+            context?.pathReplace,
+            context?.pathReplaceWith,
+        );
 
         let filteredFolders = folder.children?.folders || [];
         let filteredSongs = folder.children?.songs || [];
@@ -851,28 +985,8 @@ export const SubsonicController: InternalControllerEndpoint = {
             startIndex: query.startIndex,
         });
     },
-    getImageUrl: ({ apiClientProps: { server }, query }) => {
-        const { id, size } = query;
-        const imageSize = size;
-
-        if (!server?.url || !server?.credential) {
-            return null;
-        }
-
-        // Check for default placeholder image ID
-        if (id.match('2a96cbd8b46e442fc41c2b86b821562f')) {
-            return null;
-        }
-
-        return (
-            `${server.url}/rest/getCoverArt.view` +
-            `?id=${id}` +
-            `&${server.credential}` +
-            '&v=1.13.0' +
-            '&c=Feishin' +
-            (imageSize ? `&size=${imageSize}` : '')
-        );
-    },
+    getImageRequest: getSubsonicImageRequest,
+    getImageUrl: (args) => getSubsonicImageRequest(args)?.url || null,
     getInternetRadioStations: async (args) => {
         const { apiClientProps } = args;
 
@@ -990,7 +1104,7 @@ export const SubsonicController: InternalControllerEndpoint = {
 
         return results.length;
     },
-    getPlaylistSongList: async ({ apiClientProps, query }) => {
+    getPlaylistSongList: async ({ apiClientProps, context, query }) => {
         const res = await ssApiClient(apiClientProps).getPlaylist({
             query: {
                 id: query.id,
@@ -1002,8 +1116,15 @@ export const SubsonicController: InternalControllerEndpoint = {
         }
 
         const items =
-            res.body.playlist.entry?.map((song) => ssNormalize.song(song, apiClientProps.server)) ||
-            [];
+            res.body.playlist.entry?.map((song, index) =>
+                ssNormalize.song(
+                    song,
+                    apiClientProps.server,
+                    context?.pathReplace,
+                    context?.pathReplaceWith,
+                    index,
+                ),
+            ) || [];
 
         return {
             items,
@@ -1011,7 +1132,7 @@ export const SubsonicController: InternalControllerEndpoint = {
             totalRecordCount: items.length,
         };
     },
-    getPlayQueue: async ({ apiClientProps }) => {
+    getPlayQueue: async ({ apiClientProps, context }) => {
         if (hasFeature(apiClientProps.server, ServerFeature.SERVER_PLAY_QUEUE)) {
             const res = await ssApiClient(apiClientProps).getPlayQueueByIndex();
 
@@ -1026,7 +1147,15 @@ export const SubsonicController: InternalControllerEndpoint = {
                 changed,
                 changedBy,
                 currentIndex: currentIndex ?? 0,
-                entry: entry?.map((song) => ssNormalize.song(song, apiClientProps.server)) || [],
+                entry:
+                    entry?.map((song) =>
+                        ssNormalize.song(
+                            song,
+                            apiClientProps.server,
+                            context?.pathReplace,
+                            context?.pathReplaceWith,
+                        ),
+                    ) || [],
                 positionMs: position ?? 0,
                 username,
             };
@@ -1043,14 +1172,22 @@ export const SubsonicController: InternalControllerEndpoint = {
                 changed,
                 changedBy,
                 currentIndex: current ? entry.findIndex((item) => item.id === current) : 0,
-                entry: entry?.map((song) => ssNormalize.song(song, apiClientProps.server)) || [],
+                entry:
+                    entry?.map((song) =>
+                        ssNormalize.song(
+                            song,
+                            apiClientProps.server,
+                            context?.pathReplace,
+                            context?.pathReplaceWith,
+                        ),
+                    ) || [],
                 positionMs: position ?? 0,
                 username,
             };
         }
     },
     getRandomSongList: async (args) => {
-        const { apiClientProps, query } = args;
+        const { apiClientProps, context, query } = args;
 
         const res = await ssApiClient(apiClientProps).getRandomSongList({
             query: {
@@ -1068,7 +1205,12 @@ export const SubsonicController: InternalControllerEndpoint = {
 
         const results = res.body.randomSongs?.song || [];
         const normalizedResults = results.map((song) =>
-            ssNormalize.song(song, apiClientProps.server),
+            ssNormalize.song(
+                song,
+                apiClientProps.server,
+                context?.pathReplace,
+                context?.pathReplaceWith,
+            ),
         );
 
         return {
@@ -1146,7 +1288,7 @@ export const SubsonicController: InternalControllerEndpoint = {
         return { features, id: apiClientProps.server?.id, version: ping.body.serverVersion };
     },
     getSimilarSongs: async (args) => {
-        const { apiClientProps, query } = args;
+        const { apiClientProps, context, query } = args;
 
         const res = await ssApiClient(apiClientProps).getSimilarSongs({
             query: {
@@ -1165,14 +1307,21 @@ export const SubsonicController: InternalControllerEndpoint = {
 
         return res.body.similarSongs.song.reduce<Song[]>((acc, song) => {
             if (song.id !== query.songId) {
-                acc.push(ssNormalize.song(song, apiClientProps.server));
+                acc.push(
+                    ssNormalize.song(
+                        song,
+                        apiClientProps.server,
+                        context?.pathReplace,
+                        context?.pathReplaceWith,
+                    ),
+                );
             }
 
             return acc;
         }, []);
     },
     getSongDetail: async (args) => {
-        const { apiClientProps, query } = args;
+        const { apiClientProps, context, query } = args;
 
         const res = await ssApiClient(apiClientProps).getSong({
             query: {
@@ -1184,9 +1333,14 @@ export const SubsonicController: InternalControllerEndpoint = {
             throw new Error('Failed to get song detail');
         }
 
-        return ssNormalize.song(res.body.song, apiClientProps.server);
+        return ssNormalize.song(
+            res.body.song,
+            apiClientProps.server,
+            context?.pathReplace,
+            context?.pathReplaceWith,
+        );
     },
-    getSongList: async ({ apiClientProps, query }) => {
+    getSongList: async ({ apiClientProps, context, query }) => {
         const fromAlbumPromises: Promise<ServerInferResponses<typeof contract.getAlbum>>[] = [];
         const artistDetailPromises: Promise<ServerInferResponses<typeof contract.getArtist>>[] = [];
 
@@ -1211,7 +1365,12 @@ export const SubsonicController: InternalControllerEndpoint = {
             return {
                 items:
                     res.body.searchResult3?.song?.map((song) =>
-                        ssNormalize.song(song, apiClientProps.server),
+                        ssNormalize.song(
+                            song,
+                            apiClientProps.server,
+                            context?.pathReplace,
+                            context?.pathReplaceWith,
+                        ),
                     ) || [],
                 startIndex: query.startIndex,
                 totalRecordCount: null,
@@ -1235,7 +1394,15 @@ export const SubsonicController: InternalControllerEndpoint = {
             const results = res.body.songsByGenre?.song || [];
 
             return {
-                items: results.map((song) => ssNormalize.song(song, apiClientProps.server)) || [],
+                items:
+                    results.map((song) =>
+                        ssNormalize.song(
+                            song,
+                            apiClientProps.server,
+                            context?.pathReplace,
+                            context?.pathReplaceWith,
+                        ),
+                    ) || [],
                 startIndex: 0,
                 totalRecordCount: null,
             };
@@ -1252,10 +1419,24 @@ export const SubsonicController: InternalControllerEndpoint = {
                 throw new Error('Failed to get song list');
             }
 
-            const allResults =
+            let allResults =
                 (res.body.starred?.song || []).map((song) =>
-                    ssNormalize.song(song, apiClientProps.server),
+                    ssNormalize.song(
+                        song,
+                        apiClientProps.server,
+                        context?.pathReplace,
+                        context?.pathReplaceWith,
+                    ),
                 ) || [];
+
+            const filterArtistIds = query.albumArtistIds || query.artistIds;
+
+            if (filterArtistIds?.length) {
+                const idSet = new Set(filterArtistIds);
+                allResults = allResults.filter((song) =>
+                    song.albumArtists?.some((aa) => idSet.has(aa.id)),
+                );
+            }
 
             return sortAndPaginate(allResults, {
                 limit: query.limit,
@@ -1330,7 +1511,15 @@ export const SubsonicController: InternalControllerEndpoint = {
             }
 
             return {
-                items: results.map((song) => ssNormalize.song(song, apiClientProps.server)) || [],
+                items:
+                    results.map((song) =>
+                        ssNormalize.song(
+                            song,
+                            apiClientProps.server,
+                            context?.pathReplace,
+                            context?.pathReplaceWith,
+                        ),
+                    ) || [],
                 startIndex: 0,
                 totalRecordCount: results.length,
             };
@@ -1356,7 +1545,12 @@ export const SubsonicController: InternalControllerEndpoint = {
         return {
             items:
                 res.body.searchResult3?.song?.map((song) =>
-                    ssNormalize.song(song, apiClientProps.server),
+                    ssNormalize.song(
+                        song,
+                        apiClientProps.server,
+                        context?.pathReplace,
+                        context?.pathReplaceWith,
+                    ),
                 ) || [],
             startIndex: 0,
             totalRecordCount: null,
@@ -1473,6 +1667,76 @@ export const SubsonicController: InternalControllerEndpoint = {
             }
 
             return (res.body.starred?.song || []).length || 0;
+        }
+
+        const artistIds = query.albumArtistIds || query.artistIds;
+
+        if (query.albumIds || artistIds) {
+            const fromAlbumPromises: Promise<ServerInferResponses<typeof contract.getAlbum>>[] = [];
+            const artistDetailPromises: Promise<ServerInferResponses<typeof contract.getArtist>>[] =
+                [];
+
+            if (query.albumIds) {
+                for (const albumId of query.albumIds) {
+                    fromAlbumPromises.push(
+                        ssApiClient(apiClientProps).getAlbum({
+                            query: {
+                                id: albumId,
+                            },
+                        }),
+                    );
+                }
+            }
+
+            if (artistIds) {
+                for (const artistId of artistIds) {
+                    artistDetailPromises.push(
+                        ssApiClient(apiClientProps).getArtist({
+                            query: {
+                                id: artistId,
+                            },
+                        }),
+                    );
+                }
+
+                const artistResult = await Promise.all(artistDetailPromises);
+
+                const albums = artistResult.flatMap((artist) => {
+                    if (artist.status !== 200) {
+                        return [];
+                    }
+
+                    return artist.body.artist.album ?? [];
+                });
+
+                const albumIds = albums.map((album) => album.id);
+
+                for (const albumId of albumIds) {
+                    fromAlbumPromises.push(
+                        ssApiClient(apiClientProps).getAlbum({
+                            query: {
+                                id: albumId.toString(),
+                            },
+                        }),
+                    );
+                }
+            }
+
+            let results: z.infer<typeof ssType._response.song>[] = [];
+
+            if (fromAlbumPromises.length > 0) {
+                const albumsResult = await Promise.all(fromAlbumPromises);
+
+                results = albumsResult.flatMap((album) => {
+                    if (album.status !== 200) {
+                        return [];
+                    }
+
+                    return album.body.album.song;
+                });
+            }
+
+            return results.length;
         }
 
         let totalRecordCount = 0;
@@ -1595,26 +1859,56 @@ export const SubsonicController: InternalControllerEndpoint = {
         });
     },
     getTopSongs: async (args) => {
-        const { apiClientProps, query } = args;
+        const { apiClientProps, context, query } = args;
 
-        const res = await ssApiClient(apiClientProps).getTopSongsList({
+        const type = query.type === 'personal' ? 'personal' : 'community';
+
+        if (type === 'community') {
+            const res = await ssApiClient(apiClientProps).getTopSongsList({
+                query: {
+                    artist: query.artist,
+                    count: query.limit,
+                },
+            });
+
+            if (res.status !== 200) {
+                throw new Error('Failed to get top songs');
+            }
+
+            return {
+                items: (res.body.topSongs?.song || []).map((song) =>
+                    ssNormalize.song(
+                        song,
+                        apiClientProps.server,
+                        context?.pathReplace,
+                        context?.pathReplaceWith,
+                    ),
+                ),
+                startIndex: 0,
+                totalRecordCount: res.body.topSongs?.song?.length || 0,
+            };
+        }
+
+        const res = await SubsonicController.getSongList({
+            apiClientProps,
             query: {
-                artist: query.artist,
-                count: query.limit,
+                artistIds: [query.artistId],
+                sortBy: SongListSort.PLAY_COUNT,
+                sortOrder: SortOrder.DESC,
+                startIndex: 0,
             },
         });
 
-        if (res.status !== 200) {
-            throw new Error('Failed to get top songs');
-        }
+        const songsWithPlayCount = orderBy(
+            res.items.filter((song) => song.playCount > 0),
+            ['playCount', 'albumId', 'trackNumber'],
+            ['desc', 'asc', 'asc'],
+        );
 
         return {
-            items:
-                res.body.topSongs?.song?.map((song) =>
-                    ssNormalize.song(song, apiClientProps.server),
-                ) || [],
+            items: songsWithPlayCount,
             startIndex: 0,
-            totalRecordCount: res.body.topSongs?.song?.length || 0,
+            totalRecordCount: res.totalRecordCount,
         };
     },
     getUserInfo: async (args) => {
@@ -1651,7 +1945,7 @@ export const SubsonicController: InternalControllerEndpoint = {
         return null;
     },
     replacePlaylist: async (args) => {
-        const { apiClientProps, body, query } = args;
+        const { apiClientProps, body, context, query } = args;
 
         // 1. Fetch existing songs from the playlist
         const existingSongsRes = await ssApiClient(apiClientProps).getPlaylist({
@@ -1666,7 +1960,12 @@ export const SubsonicController: InternalControllerEndpoint = {
 
         const existingSongs =
             existingSongsRes.body.playlist.entry?.map((song) =>
-                ssNormalize.song(song, apiClientProps.server),
+                ssNormalize.song(
+                    song,
+                    apiClientProps.server,
+                    context?.pathReplace,
+                    context?.pathReplaceWith,
+                ),
             ) || [];
 
         // 2. Get playlist detail to get the name
@@ -1778,7 +2077,7 @@ export const SubsonicController: InternalControllerEndpoint = {
         return null;
     },
     search: async (args) => {
-        const { apiClientProps, query } = args;
+        const { apiClientProps, context, query } = args;
 
         const res = await ssApiClient(apiClientProps).search3({
             query: {
@@ -1802,10 +2101,20 @@ export const SubsonicController: InternalControllerEndpoint = {
                 ssNormalize.albumArtist(artist, apiClientProps.server),
             ),
             albums: (res.body.searchResult3?.album || []).map((album) =>
-                ssNormalize.album(album, apiClientProps.server),
+                ssNormalize.album(
+                    album,
+                    apiClientProps.server,
+                    args.context?.pathReplace,
+                    args.context?.pathReplaceWith,
+                ),
             ),
             songs: (res.body.searchResult3?.song || []).map((song) =>
-                ssNormalize.song(song, apiClientProps.server),
+                ssNormalize.song(
+                    song,
+                    apiClientProps.server,
+                    context?.pathReplace,
+                    context?.pathReplaceWith,
+                ),
             ),
         };
     },

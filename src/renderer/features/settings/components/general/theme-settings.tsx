@@ -1,5 +1,5 @@
 import isElectron from 'is-electron';
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import i18n from '/@/i18n/i18n';
@@ -13,6 +13,7 @@ import { THEME_DATA, useSetColorScheme } from '/@/renderer/themes/use-app-theme'
 import { ColorInput } from '/@/shared/components/color-input/color-input';
 import { Group } from '/@/shared/components/group/group';
 import { Select } from '/@/shared/components/select/select';
+import { Slider } from '/@/shared/components/slider/slider';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Switch } from '/@/shared/components/switch/switch';
 import { getAppTheme } from '/@/shared/themes/app-theme';
@@ -85,7 +86,7 @@ const renderThemeOption = ({ option }: { option: { label: string; value: string 
     );
 };
 
-export const ThemeSettings = () => {
+export const ThemeSettings = memo(() => {
     const { t } = useTranslation();
     const settings = useGeneralSettings();
     const { setSettings } = useSettingsStoreActions();
@@ -101,7 +102,6 @@ export const ThemeSettings = () => {
                     onChange={(e) => {
                         setSettings({
                             general: {
-                                ...settings,
                                 followSystemTheme: e.currentTarget.checked,
                             },
                         });
@@ -110,9 +110,7 @@ export const ThemeSettings = () => {
                             localSettings.themeSet(
                                 e.currentTarget.checked
                                     ? 'system'
-                                    : settings.theme === AppTheme.DEFAULT_DARK
-                                      ? 'dark'
-                                      : 'light',
+                                    : (getAppTheme(settings.theme).mode ?? 'dark'),
                             );
                         }
                     }}
@@ -135,12 +133,11 @@ export const ThemeSettings = () => {
 
                         setSettings({
                             general: {
-                                ...settings,
                                 theme,
                             },
                         });
 
-                        const colorScheme = theme === AppTheme.DEFAULT_DARK ? 'dark' : 'light';
+                        const colorScheme = getAppTheme(theme).mode ?? 'dark';
 
                         setColorScheme(colorScheme);
 
@@ -167,7 +164,6 @@ export const ThemeSettings = () => {
                     onChange={(e) => {
                         setSettings({
                             general: {
-                                ...settings,
                                 themeDark: e as AppTheme,
                             },
                         });
@@ -191,7 +187,6 @@ export const ThemeSettings = () => {
                     onChange={(e) => {
                         setSettings({
                             general: {
-                                ...settings,
                                 themeLight: e as AppTheme,
                             },
                         });
@@ -214,7 +209,6 @@ export const ThemeSettings = () => {
                     onChange={(e) => {
                         setSettings({
                             general: {
-                                ...settings,
                                 useThemeAccentColor: e.currentTarget.checked,
                             },
                         });
@@ -238,7 +232,6 @@ export const ThemeSettings = () => {
                         onChangeEnd={(e) => {
                             setSettings({
                                 general: {
-                                    ...settings,
                                     accent: e,
                                 },
                             });
@@ -261,6 +254,51 @@ export const ThemeSettings = () => {
             }),
             title: t('setting.accentColor', { postProcess: 'sentenceCase' }),
         },
+        {
+            control: (
+                <Switch
+                    checked={settings.useThemePrimaryShade}
+                    onChange={(e) => {
+                        setSettings({
+                            general: {
+                                useThemePrimaryShade: e.currentTarget.checked,
+                            },
+                        });
+                    }}
+                />
+            ),
+            description: t('setting.useThemePrimaryShade', {
+                context: 'description',
+                postProcess: 'sentenceCase',
+            }),
+            isHidden: false,
+            title: t('setting.useThemePrimaryShade', { postProcess: 'sentenceCase' }),
+        },
+        {
+            control: (
+                <Slider
+                    defaultValue={settings.primaryShade}
+                    label={(value) => value}
+                    max={9}
+                    min={0}
+                    onChangeEnd={(value) => {
+                        setSettings({
+                            general: {
+                                primaryShade: value,
+                            },
+                        });
+                    }}
+                    step={1}
+                    w={120}
+                />
+            ),
+            description: t('setting.primaryShade', {
+                context: 'description',
+                postProcess: 'sentenceCase',
+            }),
+            isHidden: settings.useThemePrimaryShade,
+            title: t('setting.primaryShade', { postProcess: 'sentenceCase' }),
+        },
     ];
 
     return (
@@ -270,4 +308,4 @@ export const ThemeSettings = () => {
             title={t('page.setting.theme', { postProcess: 'sentenceCase' })}
         />
     );
-};
+});

@@ -6,7 +6,9 @@ import { useGridRows } from '/@/renderer/components/item-list/helpers/use-grid-r
 import { useItemListScrollPersist } from '/@/renderer/components/item-list/helpers/use-item-list-scroll-persist';
 import { ItemGridList } from '/@/renderer/components/item-list/item-grid-list/item-grid-list';
 import { ItemListGridComponentProps } from '/@/renderer/components/item-list/types';
+import { useListContext } from '/@/renderer/context/list-context';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
+import { useGeneralSettings } from '/@/renderer/store';
 import {
     AlbumListQuery,
     AlbumListSort,
@@ -30,37 +32,46 @@ export const AlbumListInfiniteGrid = ({
     size,
 }: AlbumListInfiniteGridProps) => {
     const listCountQuery = albumQueries.listCount({
-        query: { ...query },
+        query: { ...query, limit: itemsPerPage },
         serverId: serverId,
     }) as UseSuspenseQueryOptions<number, Error, number, readonly unknown[]>;
 
     const listQueryFn = api.controller.getAlbumList;
 
-    const { data, onRangeChanged } = useItemListInfiniteLoader({
-        eventKey: ItemListKey.ALBUM,
-        itemsPerPage,
-        itemType: LibraryItem.ALBUM,
-        listCountQuery,
-        listQueryFn,
-        query,
-        serverId,
-    });
+    const { pageKey } = useListContext();
+
+    const { dataVersion, getItem, getItemIndex, itemCount, loadedItems, onRangeChanged } =
+        useItemListInfiniteLoader({
+            eventKey: pageKey || ItemListKey.ALBUM,
+            itemsPerPage,
+            itemType: LibraryItem.ALBUM,
+            listCountQuery,
+            listQueryFn,
+            query,
+            serverId,
+        });
 
     const { handleOnScrollEnd, scrollOffset } = useItemListScrollPersist({
         enabled: saveScrollOffset,
     });
 
-    const rows = useGridRows(LibraryItem.ALBUM, ItemListKey.ALBUM);
+    const rows = useGridRows(LibraryItem.ALBUM, ItemListKey.ALBUM, size);
+    const { enableGridMultiSelect } = useGeneralSettings();
 
     return (
         <ItemGridList
-            data={data}
+            data={loadedItems}
+            dataVersion={dataVersion}
             enableExpansion
+            enableMultiSelect={enableGridMultiSelect}
             gap={gap}
+            getItem={getItem}
+            getItemIndex={getItemIndex}
             initialTop={{
                 to: scrollOffset ?? 0,
                 type: 'offset',
             }}
+            itemCount={itemCount}
             itemsPerRow={itemsPerRow}
             itemType={LibraryItem.ALBUM}
             onRangeChanged={onRangeChanged}

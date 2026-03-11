@@ -6,11 +6,27 @@
     height: 100%;
 }
 
+.title-combined.no-image {
+    grid-template-columns: 1fr;
+}
+
 .text-container {
     display: grid;
     grid-template-rows: 1fr 1fr;
     gap: var(--theme-spacing-xs);
     min-width: 0;
+}
+
+.text-container.align-left {
+    justify-items: start;
+}
+
+.text-container.align-center {
+    justify-items: center;
+}
+
+.text-container.align-right {
+    justify-items: end;
 }
 
 .text-container.compact {
@@ -19,15 +35,23 @@
 
 .title {
     display: inline-block;
-    width: fit-content;
+    width: 100%;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
+a.title {
+    width: auto;
+}
+
+
 .artists {
     display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     font-size: var(--theme-font-size-xs) !important;
@@ -69,4 +93,8 @@
 .compact-play-button-overlay button {
     width: 24px;
     height: 24px;
+}
+
+.active {
+    color: var(--theme-colors-primary);
 }

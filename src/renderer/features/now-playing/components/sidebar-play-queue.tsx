@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import isElectron from 'is-electron';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 // import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels';
@@ -12,17 +13,21 @@ import { Lyrics } from '/@/renderer/features/lyrics/lyrics';
 import { PlayQueue } from '/@/renderer/features/now-playing/components/play-queue';
 import { PlayQueueListControls } from '/@/renderer/features/now-playing/components/play-queue-list-controls';
 import {
+    useCombinedLyricsAndVisualizer,
     useFullScreenPlayerStore,
-    useGeneralSettings,
     usePlaybackSettings,
     usePlayerSong,
     useSettingsStore,
     useSettingsStoreActions,
+    useShowLyricsInSidebar,
+    useShowVisualizerInSidebar,
+    useSidebarPanelOrder,
+    useWindowSettings,
 } from '/@/renderer/store';
 import { ActionIcon, ActionIconGroup } from '/@/shared/components/action-icon/action-icon';
 import { Flex } from '/@/shared/components/flex/flex';
 import { Stack } from '/@/shared/components/stack/stack';
-import { ItemListKey, PlayerType } from '/@/shared/types/types';
+import { ItemListKey, Platform, PlayerType } from '/@/shared/types/types';
 
 type SidebarPanelType = 'lyrics' | 'queue' | 'visualizer';
 
@@ -41,20 +46,24 @@ const ButterchurnVisualizer = lazy(() =>
 export const SidebarPlayQueue = () => {
     const tableRef = useRef<ItemListHandle | null>(null);
     const [search, setSearch] = useState<string | undefined>(undefined);
-    const { expanded: isFullScreenPlayerExpanded } = useFullScreenPlayerStore();
-    const [shouldRender, setShouldRender] = useState(!isFullScreenPlayerExpanded);
     const {
-        combinedLyricsAndVisualizer,
-        showLyricsInSidebar,
-        showVisualizerInSidebar,
-        sidebarPanelOrder,
-    } = useGeneralSettings();
+        expanded: isFullScreenPlayerExpanded,
+        visualizerExpanded: isFullScreenVisualizerExpanded,
+    } = useFullScreenPlayerStore();
+    const [shouldRender, setShouldRender] = useState(!isFullScreenPlayerExpanded);
+    const combinedLyricsAndVisualizer = useCombinedLyricsAndVisualizer();
+    const showLyricsInSidebar = useShowLyricsInSidebar();
+    const showVisualizerInSidebar = useShowVisualizerInSidebar();
+    const sidebarPanelOrder = useSidebarPanelOrder();
     const { type, webAudio } = usePlaybackSettings();
+    const { windowBarStyle } = useWindowSettings();
     const showVisualizer = showVisualizerInSidebar && type === PlayerType.WEB && webAudio;
     const showPanel = showLyricsInSidebar || showVisualizer;
 
+    const shouldAddTopMargin = isElectron() && windowBarStyle === Platform.WEB;
+
     useEffect(() => {
-        if (isFullScreenPlayerExpanded) {
+        if (isFullScreenPlayerExpanded || isFullScreenVisualizerExpanded) {
             // Immediately hide when fullscreen player opens
             setShouldRender(false);
             return undefined;
@@ -68,7 +77,7 @@ export const SidebarPlayQueue = () => {
                 clearTimeout(timeoutId);
             };
         }
-    }, [isFullScreenPlayerExpanded]);
+    }, [isFullScreenPlayerExpanded, isFullScreenVisualizerExpanded]);
 
     const [defaultLayout, onLayoutChange] = usePersistence({
         debounce: 300,
@@ -101,13 +110,21 @@ export const SidebarPlayQueue = () => {
     const renderPanel = (panelType: SidebarPanelType) => {
         if (panelType === 'queue') {
             return (
-                <div className={styles.playQueueSection}>
-                    <PlayQueue
-                        listKey={ItemListKey.SIDE_QUEUE}
-                        ref={tableRef}
+                <Stack gap={0} h="100%" w="100%">
+                    <PlayQueueListControls
+                        handleSearch={setSearch}
                         searchTerm={search}
+                        tableRef={tableRef}
+                        type={ItemListKey.SIDE_QUEUE}
                     />
-                </div>
+                    <div className={styles.playQueueSection}>
+                        <PlayQueue
+                            listKey={ItemListKey.SIDE_QUEUE}
+                            ref={tableRef}
+                            searchTerm={search}
+                        />
+                    </div>
+                </Stack>
             );
         }
 
@@ -176,11 +193,7 @@ export const SidebarPlayQueue = () => {
 
     return (
         <Stack gap={0} h="100%" id="sidebar-play-queue-container" pos="relative" w="100%">
-            <PlayQueueListControls
-                handleSearch={setSearch}
-                searchTerm={search}
-                type={ItemListKey.SIDE_QUEUE}
-            />
+            {shouldAddTopMargin && <div className={styles.draggableRegion} />}
             {showPanel ? (
                 <SplitPane
                     direction="vertical"
@@ -201,15 +214,23 @@ export const SidebarPlayQueue = () => {
                     ))}
                 </SplitPane>
             ) : (
-                <Flex direction="column" style={{ flex: 1, minHeight: 0 }}>
-                    <div className={styles.playQueueSection}>
-                        <PlayQueue
-                            listKey={ItemListKey.SIDE_QUEUE}
-                            ref={tableRef}
-                            searchTerm={search}
-                        />
-                    </div>
-                </Flex>
+                <Stack gap={0} h="100%" w="100%">
+                    <PlayQueueListControls
+                        handleSearch={setSearch}
+                        searchTerm={search}
+                        tableRef={tableRef}
+                        type={ItemListKey.SIDE_QUEUE}
+                    />
+                    <Flex direction="column" style={{ flex: 1, minHeight: 0 }}>
+                        <div className={styles.playQueueSection}>
+                            <PlayQueue
+                                listKey={ItemListKey.SIDE_QUEUE}
+                                ref={tableRef}
+                                searchTerm={search}
+                            />
+                        </div>
+                    </Flex>
+                </Stack>
             )}
         </Stack>
     );
@@ -217,9 +238,9 @@ export const SidebarPlayQueue = () => {
 
 const PanelReorderControls = ({ panelType }: { panelType: 'lyrics' | 'visualizer' }) => {
     const { t } = useTranslation();
-    const generalSettings = useGeneralSettings();
-    const { combinedLyricsAndVisualizer, sidebarPanelOrder } = generalSettings;
     const { setSettings } = useSettingsStoreActions();
+    const sidebarPanelOrder = useSidebarPanelOrder();
+    const combinedLyricsAndVisualizer = useCombinedLyricsAndVisualizer();
 
     const currentIndex = sidebarPanelOrder.indexOf(panelType);
     const canMoveUp = currentIndex > 0;
@@ -238,11 +259,10 @@ const PanelReorderControls = ({ panelType }: { panelType: 'lyrics' | 'visualizer
 
         setSettings({
             general: {
-                ...generalSettings,
                 sidebarPanelOrder: newOrder,
             },
         });
-    }, [canMoveUp, currentIndex, generalSettings, sidebarPanelOrder, setSettings]);
+    }, [canMoveUp, currentIndex, sidebarPanelOrder, setSettings]);
 
     const handleMoveDown = useCallback(() => {
         if (!canMoveDown) return;
@@ -255,17 +275,15 @@ const PanelReorderControls = ({ panelType }: { panelType: 'lyrics' | 'visualizer
 
         setSettings({
             general: {
-                ...generalSettings,
                 sidebarPanelOrder: newOrder,
             },
         });
-    }, [canMoveDown, currentIndex, generalSettings, sidebarPanelOrder, setSettings]);
+    }, [canMoveDown, currentIndex, sidebarPanelOrder, setSettings]);
 
     const handleClose = useCallback(() => {
         if (combinedLyricsAndVisualizer && panelType === 'lyrics') {
             setSettings({
                 general: {
-                    ...generalSettings,
                     showLyricsInSidebar: false,
                     showVisualizerInSidebar: false,
                 },
@@ -273,19 +291,17 @@ const PanelReorderControls = ({ panelType }: { panelType: 'lyrics' | 'visualizer
         } else if (panelType === 'lyrics') {
             setSettings({
                 general: {
-                    ...generalSettings,
                     showLyricsInSidebar: false,
                 },
             });
         } else if (panelType === 'visualizer') {
             setSettings({
                 general: {
-                    ...generalSettings,
                     showVisualizerInSidebar: false,
                 },
             });
         }
-    }, [combinedLyricsAndVisualizer, generalSettings, panelType, setSettings]);
+    }, [combinedLyricsAndVisualizer, panelType, setSettings]);
 
     return (
         <div className={styles.panelReorderControls}>
@@ -356,12 +372,16 @@ const VisualizerPanel = () => {
 const CombinedLyricsAndVisualizerPanel = () => {
     const currentSong = usePlayerSong();
     const visualizerType = useSettingsStore((store) => store.visualizer.type);
+    const showLyricsInSidebar = useShowLyricsInSidebar();
+    const showVisualizerInSidebar = useShowVisualizerInSidebar();
+    const { type, webAudio } = usePlaybackSettings();
+    const showVisualizer = showVisualizerInSidebar && type === PlayerType.WEB && webAudio;
 
     const { data: lyricsData } = useQuery(
         lyricsQueries.songLyrics(
             {
                 options: {
-                    enabled: !!currentSong?.id,
+                    enabled: !!currentSong?.id && showLyricsInSidebar,
                 },
                 query: { songId: currentSong?.id || '' },
                 serverId: currentSong?._serverId || '',
@@ -377,10 +397,12 @@ const CombinedLyricsAndVisualizerPanel = () => {
             return lyricsData.length > 0 && !!lyricsData[0]?.lyrics;
         }
 
-        const lyrics = lyricsData?.lyrics;
+        const lyrics = lyricsData.selected?.lyrics;
+
         if (Array.isArray(lyrics)) {
             return lyrics.length > 0;
         }
+
         if (typeof lyrics === 'string') {
             return lyrics.trim().length > 0;
         }
@@ -391,21 +413,23 @@ const CombinedLyricsAndVisualizerPanel = () => {
     return (
         <div className={styles.lyricsSection}>
             <PanelReorderControls panelType="lyrics" />
-            <Lyrics fadeOutNoLyricsMessage={true} settingsKey="sidebar" />
-            <div
-                className={styles.visualizerOverlay}
-                style={{
-                    opacity: hasLyrics ? 0.2 : 1,
-                }}
-            >
-                <Suspense fallback={<></>}>
-                    {visualizerType === 'butterchurn' ? (
-                        <ButterchurnVisualizer />
-                    ) : (
-                        <AudioMotionAnalyzerVisualizer />
-                    )}
-                </Suspense>
-            </div>
+            {showLyricsInSidebar && <Lyrics fadeOutNoLyricsMessage={true} settingsKey="sidebar" />}
+            {showVisualizer && (
+                <div
+                    className={styles.visualizerOverlay}
+                    style={{
+                        opacity: hasLyrics && showLyricsInSidebar ? 0.2 : 1,
+                    }}
+                >
+                    <Suspense fallback={<></>}>
+                        {visualizerType === 'butterchurn' ? (
+                            <ButterchurnVisualizer />
+                        ) : (
+                            <AudioMotionAnalyzerVisualizer />
+                        )}
+                    </Suspense>
+                </div>
+            )}
         </div>
     );
 };

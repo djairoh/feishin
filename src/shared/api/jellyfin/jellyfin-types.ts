@@ -107,7 +107,7 @@ const baseParameters = z.object({
     ExcludeArtistIds: z.string().optional(),
     ExcludeItemIds: z.string().optional(),
     ExcludeItemTypes: z.string().optional(),
-    Fields: z.string().optional(),
+    Fields: z.array(z.string()).readonly().optional(),
     FolderId: z.string().optional(),
     ImageTypeLimit: z.number().optional(),
     IncludeArtists: z.boolean().optional(),
@@ -457,7 +457,10 @@ const participant = z.object({
 
 const providerIds = z.object({
     MusicBrainzAlbum: z.string().optional(),
+    MusicBrainzAlbumArtist: z.string().optional(),
     MusicBrainzArtist: z.string().optional(),
+    MusicBrainzRecording: z.string().optional(),
+    MusicBrainzReleaseGroup: z.string().optional(),
     MusicBrainzTrack: z.string().optional(),
 });
 
@@ -560,6 +563,7 @@ const album = z.object({
     RunTimeTicks: z.number(),
     ServerId: z.string(),
     Songs: z.array(song).optional(), // This is not a native Jellyfin property -- this is used for combined album detail
+    SortName: z.string().optional(),
     Studios: z.array(studio),
     Tags: z.string().array().optional(),
     Type: z.string(),
@@ -753,7 +757,7 @@ const serverInfo = z.object({
 });
 
 const similarSongsParameters = z.object({
-    Fields: z.string().optional(),
+    Fields: z.array(z.string()).readonly().optional(),
     Limit: z.number().optional(),
     UserId: z.string().optional(),
 });
@@ -802,7 +806,7 @@ const folderList = pagination.extend({
 });
 
 const folderParameters = z.object({
-    Fields: z.string().optional(),
+    Fields: z.array(z.string()).readonly().optional(),
     ParentId: z.string().optional(),
     SortBy: z.string().optional(),
     SortOrder: z.enum(sortOrderValues).optional(),
@@ -829,6 +833,16 @@ const getSessions = z.array(
         }),
     ),
 );
+
+const studioListParameters = paginationParameters.merge(
+    baseParameters.extend({
+        NameStartsWithOrGreater: z.string().optional(),
+    }),
+);
+
+const studioList = z.object({
+    Items: z.array(studio),
+});
 
 export const jfType = {
     _enum: {
@@ -866,6 +880,7 @@ export const jfType = {
         similarSongs: similarSongsParameters,
         songDetail: songDetailParameters,
         songList: songListParameters,
+        studioList: studioListParameters,
         updatePlaylist: updatePlaylistParameters,
     },
     _response: {
@@ -899,6 +914,7 @@ export const jfType = {
         similarSongs,
         song,
         songList,
+        studioList,
         topSongsList,
         updatePlaylist,
         user,

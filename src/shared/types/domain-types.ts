@@ -18,7 +18,7 @@ import {
     NDUserListSort,
 } from '/@/shared/api/navidrome/navidrome-types';
 import { ServerFeatures } from '/@/shared/types/features-types';
-import { PlayerRepeat, PlayerShuffle, PlayerStatus, PlayerStyle } from '/@/shared/types/types';
+import { PlayerStatus } from '/@/shared/types/types';
 
 export enum LibraryItem {
     ALBUM = 'album',
@@ -57,25 +57,17 @@ export type AnyLibraryItems =
 export interface PlayerData {
     currentSong: QueueSong | undefined;
     index: number;
-    muted: boolean;
     nextSong: QueueSong | undefined;
     num: 1 | 2;
     player1: QueueSong | undefined;
     player2: QueueSong | undefined;
     previousSong: QueueSong | undefined;
-    queue: QueueData;
     queueLength: number;
-    repeat: PlayerRepeat;
-    shuffle: PlayerShuffle;
-    speed: number;
     status: PlayerStatus;
-    transitionType: PlayerStyle;
-    volume: number;
 }
 
 export interface QueueData {
     default: string[];
-    priority: string[];
     shuffled: number[];
     songs: Record<string, QueueSong>;
 }
@@ -84,6 +76,13 @@ export type QueueSong = Song & {
     _uniqueId: string;
 };
 
+export interface SavedCollection {
+    filterQueryString: string;
+    id: string;
+    name: string;
+    type: LibraryItem.ALBUM | LibraryItem.SONG;
+}
+
 export type ServerListItem = {
     features?: ServerFeatures;
     id: string;
@@ -91,6 +90,8 @@ export type ServerListItem = {
     musicFolderId?: string[];
     name: string;
     preferInstantMix?: boolean;
+    preferRemoteUrl?: boolean;
+    remoteUrl?: string;
     savePassword?: boolean;
     type: ServerType;
     url: string;
@@ -164,14 +165,14 @@ export enum ImageType {
 }
 
 export enum TagListSort {
-    TAG_VALUE = 'tagValue',
+    NAME = 'name',
 }
 
 export type Album = {
     _itemType: LibraryItem.ALBUM;
     _serverId: string;
     _serverType: ServerType;
-    albumArtist: string;
+    albumArtistName: string;
     albumArtists: RelatedArtist[];
     artists: RelatedArtist[];
     comment: null | string;
@@ -185,17 +186,21 @@ export type Album = {
     isCompilation: boolean | null;
     lastPlayedAt: null | string;
     mbzId: null | string;
+    mbzReleaseGroupId: null | string;
     name: string;
     originalDate: null | string;
+    originalYear: null | number;
     participants: null | Record<string, RelatedArtist[]>;
     playCount: null | number;
     recordLabels: string[];
     releaseDate: null | string;
+    releaseType: null | string;
     releaseTypes: string[];
     releaseYear: null | number;
     size: null | number;
     songCount: null | number;
     songs?: Song[];
+    sortName: string;
     tags: null | Record<string, string[]>;
     updatedAt: string;
     userFavorite: boolean;
@@ -224,15 +229,8 @@ export type AlbumArtist = {
     userRating: null | number;
 };
 
-export type Artist = {
+export type Artist = Omit<AlbumArtist, '_itemType'> & {
     _itemType: LibraryItem.ARTIST;
-    _serverId: string;
-    _serverType: ServerType;
-    biography: null | string;
-    createdAt: string;
-    id: string;
-    name: string;
-    updatedAt: string;
 };
 
 export type AuthenticationResponse = {
@@ -268,6 +266,8 @@ export type Folder = {
         songs: Song[];
     };
     id: string;
+    imageId?: null | string;
+    imageUrl?: null | string;
     name: string;
     parentId?: string;
 };
@@ -365,6 +365,7 @@ export type Song = {
     _serverId: string;
     _serverType: ServerType;
     album: null | string;
+    albumArtistName: string;
     albumArtists: RelatedArtist[];
     albumId: string;
     artistName: string;
@@ -400,8 +401,10 @@ export type Song = {
     releaseYear: null | number;
     sampleRate: null | number;
     size: number;
+    sortName: string;
     tags: null | Record<string, string[]>;
     trackNumber: number;
+    trackSubtitle: null | string;
     updatedAt: string;
     userFavorite: boolean;
     userRating: null | number;
@@ -412,6 +415,10 @@ type BaseEndpointArgs = {
         server?: null | ServerListItemWithCredential;
         serverId: string;
         signal?: AbortSignal;
+    };
+    context?: {
+        pathReplace?: string;
+        pathReplaceWith?: string;
     };
 };
 
@@ -441,13 +448,13 @@ type TagListSortMap = {
 
 export const tagListSortMap: TagListSortMap = {
     jellyfin: {
-        tagValue: undefined,
+        name: undefined,
     },
     navidrome: {
-        tagValue: NDTagListSort.TAG_VALUE,
+        name: NDTagListSort.TAG_VALUE,
     },
     subsonic: {
-        tagValue: undefined,
+        name: undefined,
     },
 };
 
@@ -459,6 +466,7 @@ export enum AlbumListSort {
     DURATION = 'duration',
     EXPLICIT_STATUS = 'explicitStatus',
     FAVORITED = 'favorited',
+    ID = 'id',
     NAME = 'name',
     PLAY_COUNT = 'playCount',
     RANDOM = 'random',
@@ -467,6 +475,7 @@ export enum AlbumListSort {
     RECENTLY_PLAYED = 'recentlyPlayed',
     RELEASE_DATE = 'releaseDate',
     SONG_COUNT = 'songCount',
+    SORT_NAME = 'sortName',
     YEAR = 'year',
 }
 
@@ -491,7 +500,7 @@ export interface AlbumListQuery extends AlbumListNavidromeQuery, BaseQuery<Album
 // Album List
 export type AlbumListResponse = BasePaginatedResponse<Album[]>;
 
-export type ListCountQuery<TQuery> = Omit<TQuery, 'limit' | 'startIndex'>;
+export type ListCountQuery<TQuery> = Omit<TQuery, 'startIndex'>;
 
 interface AlbumListNavidromeQuery {
     hasRating?: boolean;
@@ -513,6 +522,7 @@ export const albumListSortMap: AlbumListSortMap = {
         duration: undefined,
         explicitStatus: undefined,
         favorited: undefined,
+        id: undefined,
         name: JFAlbumListSort.NAME,
         playCount: JFAlbumListSort.PLAY_COUNT,
         random: JFAlbumListSort.RANDOM,
@@ -521,6 +531,7 @@ export const albumListSortMap: AlbumListSortMap = {
         recentlyPlayed: undefined,
         releaseDate: JFAlbumListSort.RELEASE_DATE,
         songCount: undefined,
+        sortName: JFAlbumListSort.NAME,
         year: undefined,
     },
     navidrome: {
@@ -531,6 +542,7 @@ export const albumListSortMap: AlbumListSortMap = {
         duration: NDAlbumListSort.DURATION,
         explicitStatus: NDAlbumListSort.EXPLICIT_STATUS,
         favorited: NDAlbumListSort.STARRED,
+        id: undefined,
         name: NDAlbumListSort.NAME,
         playCount: NDAlbumListSort.PLAY_COUNT,
         random: NDAlbumListSort.RANDOM,
@@ -540,6 +552,7 @@ export const albumListSortMap: AlbumListSortMap = {
         // Recent versions of Navidrome support release date, but fallback to year for now
         releaseDate: NDAlbumListSort.YEAR,
         songCount: NDAlbumListSort.SONG_COUNT,
+        sortName: NDAlbumListSort.NAME,
         year: NDAlbumListSort.YEAR,
     },
     subsonic: {
@@ -550,6 +563,7 @@ export const albumListSortMap: AlbumListSortMap = {
         duration: undefined,
         explicitStatus: undefined,
         favorited: undefined,
+        id: undefined,
         name: undefined,
         playCount: undefined,
         random: undefined,
@@ -558,6 +572,7 @@ export const albumListSortMap: AlbumListSortMap = {
         recentlyPlayed: undefined,
         releaseDate: undefined,
         songCount: undefined,
+        sortName: undefined,
         year: undefined,
     },
 };
@@ -581,6 +596,7 @@ export enum SongListSort {
     RECENTLY_ADDED = 'recentlyAdded',
     RECENTLY_PLAYED = 'recentlyPlayed',
     RELEASE_DATE = 'releaseDate',
+    SORT_NAME = 'sortName',
     YEAR = 'year',
 }
 
@@ -607,6 +623,7 @@ export interface SongListQuery extends BaseQuery<SongListSort> {
     artistIds?: string[];
     favorite?: boolean;
     genreIds?: string[];
+    hasRating?: boolean;
     imageSize?: number;
     limit?: number;
     maxYear?: number;
@@ -645,6 +662,7 @@ export const songListSortMap: SongListSortMap = {
         recentlyAdded: JFSongListSort.RECENTLY_ADDED,
         recentlyPlayed: JFSongListSort.RECENTLY_PLAYED,
         releaseDate: JFSongListSort.RELEASE_DATE,
+        sortName: JFSongListSort.NAME,
         year: undefined,
     },
     navidrome: {
@@ -666,6 +684,7 @@ export const songListSortMap: SongListSortMap = {
         recentlyAdded: NDSongListSort.RECENTLY_ADDED,
         recentlyPlayed: NDSongListSort.PLAY_DATE,
         releaseDate: undefined,
+        sortName: NDSongListSort.TITLE,
         year: NDSongListSort.YEAR,
     },
     subsonic: {
@@ -687,6 +706,7 @@ export const songListSortMap: SongListSortMap = {
         recentlyAdded: undefined,
         recentlyPlayed: undefined,
         releaseDate: undefined,
+        sortName: undefined,
         year: undefined,
     },
 };
@@ -799,6 +819,16 @@ export type AlbumArtistDetailArgs = BaseEndpointArgs & { query: AlbumArtistDetai
 export type AlbumArtistDetailQuery = { id: string };
 
 export type AlbumArtistDetailResponse = AlbumArtist | null;
+
+export type AlbumArtistInfoArgs = BaseEndpointArgs & { query: AlbumArtistInfoQuery };
+
+export type AlbumArtistInfoQuery = { id: string; limit?: number };
+
+export type AlbumArtistInfoResponse = {
+    biography?: null | string;
+    imageUrl?: null | string;
+    similarArtists: null | RelatedArtist[];
+};
 
 export type ArtistListArgs = BaseEndpointArgs & { query: ArtistListQuery };
 
@@ -1204,6 +1234,7 @@ export type InternetProviderLyricResponse = {
 export type InternetProviderLyricSearchResponse = {
     artist: string;
     id: string;
+    isSync: boolean | null;
     name: string;
     score?: number;
     source: LyricSource;
@@ -1241,6 +1272,7 @@ export type ScrobbleArgs = BaseEndpointArgs & {
 };
 
 export type ScrobbleQuery = {
+    albumId?: string;
     event?: 'pause' | 'start' | 'timeupdate' | 'unpause';
     id: string;
     position?: number;
@@ -1300,6 +1332,7 @@ export type TopSongListQuery = {
     artist: string;
     artistId: string;
     limit?: number;
+    type?: 'community' | 'personal';
 };
 
 // Top Songs List
@@ -1314,6 +1347,15 @@ export enum LyricSource {
     LRCLIB = 'lrclib.net',
     NETEASE = 'NetEase',
 }
+
+export type AlbumRadioArgs = BaseEndpointArgs & {
+    query: AlbumRadioQuery;
+};
+
+export type AlbumRadioQuery = {
+    albumId: string;
+    count?: number;
+};
 
 export type ArtistRadioArgs = BaseEndpointArgs & {
     query: ArtistRadioQuery;
@@ -1341,18 +1383,21 @@ export type ControllerEndpoint = {
     ) => Promise<DeleteInternetRadioStationResponse>;
     deletePlaylist: (args: DeletePlaylistArgs) => Promise<DeletePlaylistResponse>;
     getAlbumArtistDetail: (args: AlbumArtistDetailArgs) => Promise<AlbumArtistDetailResponse>;
+    getAlbumArtistInfo?: (args: AlbumArtistInfoArgs) => Promise<AlbumArtistInfoResponse | null>;
     getAlbumArtistList: (args: AlbumArtistListArgs) => Promise<AlbumArtistListResponse>;
     getAlbumArtistListCount: (args: AlbumArtistListCountArgs) => Promise<number>;
     getAlbumDetail: (args: AlbumDetailArgs) => Promise<AlbumDetailResponse>;
     getAlbumInfo?: (args: AlbumDetailArgs) => Promise<AlbumInfo>;
     getAlbumList: (args: AlbumListArgs) => Promise<AlbumListResponse>;
     getAlbumListCount: (args: AlbumListCountArgs) => Promise<number>;
+    getAlbumRadio: (args: AlbumRadioArgs) => Promise<Song[]>;
     getArtistList: (args: ArtistListArgs) => Promise<ArtistListResponse>;
     getArtistListCount: (args: ArtistListCountArgs) => Promise<number>;
     getArtistRadio: (args: ArtistRadioArgs) => Promise<Song[]>;
     getDownloadUrl: (args: DownloadArgs) => string;
     getFolder: (args: FolderArgs) => Promise<FolderResponse>;
     getGenreList: (args: GenreListArgs) => Promise<GenreListResponse>;
+    getImageRequest: (args: ImageArgs) => ImageRequest | null;
     getImageUrl: (args: ImageArgs) => null | string;
     getInternetRadioStations: (
         args: GetInternetRadioStationsArgs,
@@ -1423,6 +1468,7 @@ export type GetQueueResponse = {
 };
 
 export type ImageArgs = BaseEndpointArgs & {
+    baseUrl?: string;
     query: ImageQuery;
 };
 
@@ -1430,6 +1476,13 @@ export type ImageQuery = {
     id: string;
     itemType: LibraryItem;
     size?: number;
+};
+
+export type ImageRequest = {
+    cacheKey: string;
+    credentials?: RequestCredentials;
+    headers?: Record<string, string>;
+    url: string;
 };
 
 export type InternalControllerEndpoint = {
@@ -1457,6 +1510,9 @@ export type InternalControllerEndpoint = {
     getAlbumArtistDetail: (
         args: ReplaceApiClientProps<AlbumArtistDetailArgs>,
     ) => Promise<AlbumArtistDetailResponse>;
+    getAlbumArtistInfo?: (
+        args: ReplaceApiClientProps<AlbumArtistInfoArgs>,
+    ) => Promise<AlbumArtistInfoResponse | null>;
     getAlbumArtistList: (
         args: ReplaceApiClientProps<AlbumArtistListArgs>,
     ) => Promise<AlbumArtistListResponse>;
@@ -1467,6 +1523,7 @@ export type InternalControllerEndpoint = {
     getAlbumInfo?: (args: ReplaceApiClientProps<AlbumDetailArgs>) => Promise<AlbumInfo>;
     getAlbumList: (args: ReplaceApiClientProps<AlbumListArgs>) => Promise<AlbumListResponse>;
     getAlbumListCount: (args: ReplaceApiClientProps<AlbumListCountArgs>) => Promise<number>;
+    getAlbumRadio: (args: ReplaceApiClientProps<AlbumRadioArgs>) => Promise<Song[]>;
     // getArtistInfo?: (args: any) => void;
     getArtistList: (args: ReplaceApiClientProps<ArtistListArgs>) => Promise<ArtistListResponse>;
     getArtistListCount: (args: ReplaceApiClientProps<ArtistListCountArgs>) => Promise<number>;
@@ -1474,6 +1531,7 @@ export type InternalControllerEndpoint = {
     getDownloadUrl: (args: ReplaceApiClientProps<DownloadArgs>) => string;
     getFolder: (args: ReplaceApiClientProps<FolderArgs>) => Promise<FolderResponse>;
     getGenreList: (args: ReplaceApiClientProps<GenreListArgs>) => Promise<GenreListResponse>;
+    getImageRequest: (args: ReplaceApiClientProps<ImageArgs>) => ImageRequest | null;
     getImageUrl: (args: ReplaceApiClientProps<ImageArgs>) => null | string;
     getInternetRadioStations: (
         args: ReplaceApiClientProps<GetInternetRadioStationsArgs>,
@@ -1618,7 +1676,6 @@ export type StructuredUnsyncedLyric = Omit<FullLyricsMetadata, 'lyrics'> & {
 };
 
 export type Tag = {
-    id: string;
     name: string;
     options: { id: string; name: string }[];
 };
@@ -1634,12 +1691,11 @@ export type TagListQuery = {
 };
 
 export type TagListResponse = {
-    boolTags?: string[];
-    enumTags?: { name: string; options: { id: string; name: string }[] }[];
     excluded: {
         album: string[];
         song: string[];
     };
+    tags?: Tag[];
 };
 
 export type UserInfoArgs = BaseEndpointArgs & { query: UserInfoQuery };
@@ -1660,5 +1716,9 @@ type BaseEndpointArgsWithServer = {
         server: null | ServerListItemWithCredential;
         serverId: string;
         signal?: AbortSignal;
+    };
+    context?: {
+        pathReplace?: string;
+        pathReplaceWith?: string;
     };
 };

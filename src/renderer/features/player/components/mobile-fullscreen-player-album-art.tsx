@@ -6,10 +6,14 @@ import styles from './mobile-fullscreen-player.module.css';
 
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import {
+    useIsRadioActive,
+    useRadioPlayer,
+} from '/@/renderer/features/radio/hooks/use-radio-player';
+import {
     useFullScreenPlayerStore,
+    useImageRes,
     usePlayerData,
     usePlayerSong,
-    useSettingsStore,
 } from '/@/renderer/store';
 import { Center } from '/@/shared/components/center/center';
 import { Icon } from '/@/shared/components/icon/icon';
@@ -44,9 +48,14 @@ const MotionImage = motion.img;
 
 const ImageWithPlaceholder = ({
     className,
+    placeholderIcon,
     useImageAspectRatio,
     ...props
-}: HTMLMotionProps<'img'> & { placeholder?: string; useImageAspectRatio?: boolean }) => {
+}: HTMLMotionProps<'img'> & {
+    placeholder?: string;
+    placeholderIcon?: 'itemAlbum' | 'radio';
+    useImageAspectRatio?: boolean;
+}) => {
     if (!props.src) {
         return (
             <Center
@@ -57,7 +66,11 @@ const ImageWithPlaceholder = ({
                     width: '100%',
                 }}
             >
-                <Icon color="muted" icon="itemAlbum" size="25%" />
+                <Icon
+                    color="muted"
+                    icon={placeholderIcon === 'radio' ? 'radio' : 'itemAlbum'}
+                    size="25%"
+                />
             </Center>
         );
     }
@@ -78,10 +91,14 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     const mainImageRef = useRef<HTMLImageElement | null>(null);
     const [mainImageDimensions, setMainImageDimensions] = useState({ idealSize: 1000 });
 
-    const albumArtRes = useSettingsStore((store) => store.general.imageRes.fullScreenPlayer);
+    const { fullScreenPlayer: albumArtRes } = useImageRes();
     const { useImageAspectRatio } = useFullScreenPlayerStore();
+    const isRadioActive = useIsRadioActive();
+    const { isPlaying: isRadioPlaying } = useRadioPlayer();
     const currentSong = usePlayerSong();
     const { nextSong } = usePlayerData();
+
+    const isPlayingRadio = isRadioActive && isRadioPlaying;
 
     const currentImageUrl = useItemImageUrl({
         id: currentSong?.imageId || undefined,
@@ -151,38 +168,58 @@ export const MobileFullscreenPlayerAlbumArt = () => {
                 })}
             >
                 <AnimatePresence initial={false} mode="sync">
-                    {imageState.current === 0 && (
+                    {isPlayingRadio ? (
                         <ImageWithPlaceholder
                             animate="open"
                             className={PlaybackSelectors.playerCoverArt}
-                            custom={{ isOpen: imageState.current === 0 }}
+                            custom={{ isOpen: true }}
                             draggable={false}
                             exit="closed"
                             initial="closed"
-                            key={`top-${currentSong?._uniqueId || 'none'}`}
+                            key="radio"
                             loading="eager"
                             placeholder="var(--theme-colors-foreground-muted)"
-                            src={imageState.topImage || ''}
+                            placeholderIcon="radio"
+                            src=""
                             useImageAspectRatio={useImageAspectRatio}
                             variants={imageVariants}
                         />
-                    )}
+                    ) : (
+                        <>
+                            {imageState.current === 0 && (
+                                <ImageWithPlaceholder
+                                    animate="open"
+                                    className={PlaybackSelectors.playerCoverArt}
+                                    custom={{ isOpen: imageState.current === 0 }}
+                                    draggable={false}
+                                    exit="closed"
+                                    initial="closed"
+                                    key={`top-${currentSong?._uniqueId || 'none'}`}
+                                    loading="eager"
+                                    placeholder="var(--theme-colors-foreground-muted)"
+                                    src={imageState.topImage || ''}
+                                    useImageAspectRatio={useImageAspectRatio}
+                                    variants={imageVariants}
+                                />
+                            )}
 
-                    {imageState.current === 1 && (
-                        <ImageWithPlaceholder
-                            animate="open"
-                            className={PlaybackSelectors.playerCoverArt}
-                            custom={{ isOpen: imageState.current === 1 }}
-                            draggable={false}
-                            exit="closed"
-                            initial="closed"
-                            key={`bottom-${currentSong?._uniqueId || 'none'}`}
-                            loading="eager"
-                            placeholder="var(--theme-colors-foreground-muted)"
-                            src={imageState.bottomImage || ''}
-                            useImageAspectRatio={useImageAspectRatio}
-                            variants={imageVariants}
-                        />
+                            {imageState.current === 1 && (
+                                <ImageWithPlaceholder
+                                    animate="open"
+                                    className={PlaybackSelectors.playerCoverArt}
+                                    custom={{ isOpen: imageState.current === 1 }}
+                                    draggable={false}
+                                    exit="closed"
+                                    initial="closed"
+                                    key={`bottom-${currentSong?._uniqueId || 'none'}`}
+                                    loading="eager"
+                                    placeholder="var(--theme-colors-foreground-muted)"
+                                    src={imageState.bottomImage || ''}
+                                    useImageAspectRatio={useImageAspectRatio}
+                                    variants={imageVariants}
+                                />
+                            )}
+                        </>
                     )}
                 </AnimatePresence>
             </div>

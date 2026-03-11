@@ -6,29 +6,38 @@ import {
     type ImgHTMLAttributes,
     memo,
     ReactNode,
+    useEffect,
+    useMemo,
+    useState,
 } from 'react';
-import { Img } from 'react-image';
 
 import styles from './image.module.css';
+import { useNativeImage } from './use-native-image';
 
 import { AppIcon, Icon } from '/@/shared/components/icon/icon';
 import { Skeleton } from '/@/shared/components/skeleton/skeleton';
+import { useDebouncedValue } from '/@/shared/hooks/use-debounced-value';
 import { useInViewport } from '/@/shared/hooks/use-in-viewport';
+import { ImageRequest } from '/@/shared/types/domain-types';
 
 export interface ImageProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> {
     containerClassName?: string;
     enableAnimation?: boolean;
+    enableDebounce?: boolean;
+    enableViewport?: boolean;
+    fetchPriority?: 'auto' | 'high' | 'low';
     imageContainerProps?: Omit<ImageContainerProps, 'children'>;
+    imageRequest?: ImageRequest;
     includeLoader?: boolean;
     includeUnloader?: boolean;
-    src: string | string[] | undefined;
-    thumbHash?: string;
+    isExplicit?: boolean;
+    src: string | undefined;
     unloaderIcon?: keyof typeof AppIcon;
 }
 
 interface ImageContainerProps extends HTMLAttributes<HTMLDivElement> {
     children: ReactNode;
-    enableAnimation?: boolean;
+    isExplicit?: boolean;
 }
 
 interface ImageLoaderProps {
@@ -47,44 +56,90 @@ export function BaseImage({
     className,
     containerClassName,
     enableAnimation = false,
+    enableDebounce = false,
+    enableViewport = true,
+    fetchPriority,
     imageContainerProps,
+    imageRequest,
     includeLoader = true,
     includeUnloader = true,
+    isExplicit = false,
+    onError,
+    onLoad,
     src,
     unloaderIcon = 'emptyImage',
     ...props
 }: ImageProps) {
-    const { inViewport, ref } = useInViewport();
+    const viewport = useInViewport();
+    const { inViewport, ref } = enableViewport ? viewport : { inViewport: true, ref: undefined };
+    const { className: containerPropsClassName, ...restContainerProps } = imageContainerProps || {};
+
+    const rawImageRequest = useMemo(
+        () => imageRequest ?? (src ? { cacheKey: src, url: src } : undefined),
+        [imageRequest, src],
+    );
+    const [debouncedImageRequest] = useDebouncedValue(rawImageRequest, 100, {
+        waitForInitial: true,
+    });
+    const effectiveImageRequest = enableDebounce ? debouncedImageRequest : rawImageRequest;
+
+    const [hasLoadedInInstance, setHasLoadedInInstance] = useState(false);
+
+    useEffect(() => {
+        setHasLoadedInInstance(false);
+    }, [effectiveImageRequest?.cacheKey]);
+
+    const shouldLoadImage = Boolean(
+        effectiveImageRequest && (!enableViewport || inViewport || hasLoadedInInstance),
+    );
+
+    const nativeImage = useNativeImage({
+        enabled: shouldLoadImage,
+        fetchPriority,
+        onFetchError: src
+            ? () => {
+                  (onError as ((event: undefined) => void) | undefined)?.(undefined);
+              }
+            : undefined,
+        request: effectiveImageRequest,
+    });
+
+    useEffect(() => {
+        if (!nativeImage.isLoaded || !effectiveImageRequest?.cacheKey) {
+            return;
+        }
+
+        setHasLoadedInInstance(true);
+    }, [effectiveImageRequest?.cacheKey, nativeImage.isLoaded]);
 
     return (
         <ImageContainer
-            className={containerClassName}
-            enableAnimation={enableAnimation}
+            className={clsx(containerClassName, containerPropsClassName)}
+            isExplicit={isExplicit}
             ref={ref}
-            {...imageContainerProps}
+            {...restContainerProps}
         >
-            {inViewport && src ? (
-                <Img
+            {nativeImage.displaySrc ? (
+                <img
                     className={clsx(styles.image, className, {
                         [styles.animated]: enableAnimation,
                     })}
                     decoding="async"
-                    fetchPriority="high"
-                    loader={includeLoader ? <ImageLoader className={className} /> : null}
-                    loading="eager"
-                    src={src}
-                    unloader={
-                        includeUnloader ? (
-                            <ImageUnloader className={className} icon={unloaderIcon} />
-                        ) : null
-                    }
+                    fetchPriority={fetchPriority}
+                    onError={onError}
+                    onLoad={onLoad}
+                    src={nativeImage.displaySrc}
                     {...props}
                 />
             ) : !src ? (
                 <ImageUnloader className={className} icon={unloaderIcon} />
-            ) : (
+            ) : nativeImage.isError ? (
+                includeUnloader ? (
+                    <ImageUnloader className={className} icon={unloaderIcon} />
+                ) : null
+            ) : includeLoader ? (
                 <ImageLoader className={className} />
-            )}
+            ) : null}
         </ImageContainer>
     );
 }
@@ -93,19 +148,17 @@ export const Image = memo(BaseImage);
 
 const ImageContainer = forwardRef(
     (
-        { children, className, enableAnimation, ...props }: ImageContainerProps,
+        { children, className, isExplicit, ...props }: ImageContainerProps,
         ref: ForwardedRef<HTMLDivElement>,
     ) => {
-        if (!enableAnimation) {
-            return (
-                <div className={clsx(styles.imageContainer, className)} ref={ref} {...props}>
-                    {children}
-                </div>
-            );
-        }
-
         return (
-            <div className={clsx(styles.imageContainer, className)} ref={ref} {...props}>
+            <div
+                className={clsx(styles.imageContainer, className, {
+                    [styles.censored]: isExplicit,
+                })}
+                ref={ref}
+                {...props}
+            >
                 {children}
             </div>
         );

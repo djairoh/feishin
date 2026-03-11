@@ -123,6 +123,45 @@ export const setJsonSearchParam = (
     return newParams;
 };
 
+export const setMultipleSearchParams = (
+    searchParams: URLSearchParams,
+    params: Record<
+        string,
+        boolean | null | number | Record<string, any> | string | string[] | undefined
+    >,
+    jsonKeys?: Set<string>,
+): URLSearchParams => {
+    const newParams = new URLSearchParams(searchParams);
+
+    for (const [key, value] of Object.entries(params)) {
+        if (value === null || value === undefined) {
+            newParams.delete(key);
+            continue;
+        }
+
+        if (jsonKeys?.has(key)) {
+            if (typeof value === 'object' && !Array.isArray(value)) {
+                newParams.set(key, JSON.stringify(value));
+            } else {
+                newParams.delete(key);
+            }
+        } else {
+            if (Array.isArray(value)) {
+                newParams.delete(key);
+                value.forEach((v) => newParams.append(key, String(v)));
+            } else if (typeof value === 'boolean') {
+                newParams.set(key, String(value));
+            } else if (typeof value === 'number') {
+                newParams.set(key, String(value));
+            } else {
+                newParams.set(key, value as string);
+            }
+        }
+    }
+
+    return newParams;
+};
+
 /**
  * Parse custom filters from URLSearchParams with validation
  */
@@ -138,4 +177,34 @@ export const parseCustomFiltersParam = (
     } catch {
         return undefined;
     }
+};
+
+const PAGINATION_KEYS = ['currentPage', 'scrollOffset'];
+
+/**
+ * Build filter query string from current search params (minus pagination/scroll).
+ * Optionally merge customFilters (e.g. from ListContext) into the result.
+ */
+export const getFilterQueryStringFromSearchParams = (
+    searchParams: URLSearchParams,
+    customFilters?: Record<string, boolean | number | Record<string, unknown> | string | string[]>,
+): string => {
+    const params = new URLSearchParams(searchParams);
+    for (const key of PAGINATION_KEYS) {
+        params.delete(key);
+    }
+    if (customFilters && Object.keys(customFilters).length > 0) {
+        for (const [key, value] of Object.entries(customFilters)) {
+            if (value === undefined || value === null) continue;
+            if (Array.isArray(value)) {
+                params.delete(key);
+                value.forEach((v) => params.append(key, String(v)));
+            } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                params.set(key, JSON.stringify(value));
+            } else {
+                params.set(key, String(value));
+            }
+        }
+    }
+    return params.toString();
 };

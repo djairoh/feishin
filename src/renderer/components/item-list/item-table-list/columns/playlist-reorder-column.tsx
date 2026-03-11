@@ -19,12 +19,14 @@ import { useLongPress } from '/@/shared/hooks/use-long-press';
 import { LibraryItem } from '/@/shared/types/domain-types';
 import { DragOperation, DragTarget, DragTargetMap } from '/@/shared/types/drag-and-drop';
 
-export const PlaylistReorderColumn = (props: ItemTableListInnerColumn) => {
+const PlaylistReorderColumnBase = (props: ItemTableListInnerColumn) => {
     const { t } = useTranslation();
     const { playlistId } = useParams() as { playlistId?: string };
     const isHeaderEnabled = !!props.enableHeader;
     const isDataRow = isHeaderEnabled ? props.rowIndex > 0 : true;
-    const item = isDataRow ? props.data[props.rowIndex] : null;
+    const item = isDataRow
+        ? (props.getRowItem?.(props.rowIndex) ?? props.data[props.rowIndex])
+        : null;
 
     const isPlaylistSong = props.itemType === LibraryItem.PLAYLIST_SONG;
 
@@ -153,8 +155,8 @@ export const PlaylistReorderColumn = (props: ItemTableListInnerColumn) => {
     const isDragging = props.internalState ? isDraggingState : isDraggingLocal;
 
     const getValidDataItems = useCallback(() => {
-        return props.data.filter((d) => d !== null && (d as any).id);
-    }, [props.data]);
+        return props.internalState.getData().filter((d) => d !== null && (d as any).id);
+    }, [props.internalState]);
 
     const handleMoveUp = useCallback(() => {
         if (!item || !isDataRow || !isPlaylistSong || !playlistId) {
@@ -361,3 +363,5 @@ export const PlaylistReorderColumn = (props: ItemTableListInnerColumn) => {
         </TableColumnContainer>
     );
 };
+
+export const PlaylistReorderColumn = PlaylistReorderColumnBase;

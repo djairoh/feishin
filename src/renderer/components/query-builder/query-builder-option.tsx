@@ -139,7 +139,7 @@ const QueryValueInput = ({
         case 'dateRange':
             if (operator === 'inTheRangeDate') {
                 return (
-                    <Group gap="sm" wrap="nowrap">
+                    <Group gap="sm" grow wrap="nowrap">
                         <DateInput
                             clearable
                             defaultLevel="year"
@@ -213,7 +213,11 @@ const QueryValueInput = ({
                 <NumberInput
                     onChange={onChange}
                     size="sm"
-                    value={value !== undefined && value !== null ? Number(value) : undefined}
+                    value={
+                        value !== undefined && value !== null && value !== ''
+                            ? Number(value)
+                            : undefined
+                    }
                     {...props}
                 />
             );

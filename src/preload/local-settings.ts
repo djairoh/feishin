@@ -1,24 +1,16 @@
 import { ipcRenderer, IpcRendererEvent, OpenDialogOptions, webFrame } from 'electron';
-import Store from 'electron-store';
 
 import { TitleTheme } from '/@/shared/types/types';
-
-const store = new Store();
 
 const set = (
     property: string,
     value: boolean | Record<string, unknown> | string | string[] | undefined,
 ) => {
-    if (value === undefined) {
-        store.delete(property);
-        return;
-    }
-
-    store.set(`${property}`, value);
+    ipcRenderer.send('settings-set', { property, value });
 };
 
-const get = (property: string) => {
-    return store.get(`${property}`);
+const get = async (property: string) => {
+    return ipcRenderer.invoke('settings-get', { property });
 };
 
 const restart = () => {
@@ -78,13 +70,22 @@ export const toServerType = (value?: string): null | string => {
 const SERVER_TYPE = toServerType(process.env.SERVER_TYPE);
 
 const env = {
+    LEGACY_AUTHENTICATION:
+        SERVER_TYPE !== null
+            ? process.env.LEGACY_AUTHENTICATION?.toLocaleLowerCase() === 'true'
+            : false,
+    REMOTE_URL: process.env.REMOTE_URL ?? '',
     SERVER_LOCK:
         SERVER_TYPE !== null ? process.env.SERVER_LOCK?.toLocaleLowerCase() === 'true' : false,
     SERVER_NAME: process.env.SERVER_NAME ?? '',
     SERVER_TYPE,
     SERVER_URL: process.env.SERVER_URL ?? 'http://',
-    START_MAXIMIZED: store.get('maximized'),
+    START_MAXIMIZED: undefined as boolean | undefined,
 };
+
+get('maximized').then((value) => {
+    env.START_MAXIMIZED = value as boolean | undefined;
+});
 
 export const localSettings = {
     disableMediaKeys,

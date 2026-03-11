@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useItemListColumnReorder } from '/@/renderer/components/item-list/helpers/use-item-list-column-reorder';
 import { useItemListColumnResize } from '/@/renderer/components/item-list/helpers/use-item-list-column-resize';
 import { useItemListScrollPersist } from '/@/renderer/components/item-list/helpers/use-item-list-scroll-persist';
+import { ItemListWithPagination } from '/@/renderer/components/item-list/item-list-pagination/item-list-pagination';
 import { ItemTableList } from '/@/renderer/components/item-list/item-table-list/item-table-list';
 import { ItemTableListColumn } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { ItemControls, ItemListTableComponentProps } from '/@/renderer/components/item-list/types';
@@ -20,11 +21,15 @@ import {
     PlaylistSongListResponse,
     Song,
 } from '/@/shared/types/domain-types';
-import { ItemListKey, Play } from '/@/shared/types/types';
+import { ItemListKey, Play, TableColumn } from '/@/shared/types/types';
 
 interface PlaylistDetailSongListTableProps
     extends Omit<ItemListTableComponentProps<PlaylistSongListQuery>, 'query'> {
+    currentPage?: number;
     data: PlaylistSongListResponse;
+    items?: Song[];
+    itemsPerPage?: number;
+    onPageChange?: (page: number) => void;
 }
 
 export const PlaylistDetailSongListTable = forwardRef<any, PlaylistDetailSongListTableProps>(
@@ -32,12 +37,17 @@ export const PlaylistDetailSongListTable = forwardRef<any, PlaylistDetailSongLis
         {
             autoFitColumns = false,
             columns,
+            currentPage,
             data,
             enableAlternateRowColors = false,
+            enableHeader = true,
             enableHorizontalBorders = false,
             enableRowHoverHighlight = true,
             enableSelection = true,
             enableVerticalBorders = false,
+            items: itemsProp,
+            itemsPerPage,
+            onPageChange,
             saveScrollOffset = true,
             size = 'default',
         },
@@ -57,23 +67,28 @@ export const PlaylistDetailSongListTable = forwardRef<any, PlaylistDetailSongLis
 
         const { searchTerm } = useSearchTermFilter();
         const { query } = usePlaylistSongListFilters();
-        const { setListData } = useListContext();
 
-        const songData = useMemo(() => {
-            let items = data?.items || [];
+        const albumGroupingEnabled = columns.some(
+            (col) => col.id === TableColumn.ALBUM_GROUP && col.isEnabled,
+        );
 
+        const songDataFromData = useMemo(() => {
+            let list = data?.items || [];
             if (searchTerm) {
-                items = searchLibraryItems(items, searchTerm, LibraryItem.SONG);
+                list = searchLibraryItems(list, searchTerm, LibraryItem.SONG);
+                return list;
             }
-
-            return sortSongList(items, query.sortBy, query.sortOrder);
+            return sortSongList(list, query.sortBy, query.sortOrder);
         }, [data?.items, searchTerm, query.sortBy, query.sortOrder]);
 
+        const { setListData } = useListContext();
+        const songData = itemsProp ?? songDataFromData;
+
         useEffect(() => {
-            if (setListData) {
-                setListData(songData);
+            if (itemsProp == null && setListData) {
+                setListData(songDataFromData);
             }
-        }, [songData, setListData]);
+        }, [itemsProp, songDataFromData, setListData]);
 
         const player = usePlayer();
 
@@ -106,15 +121,34 @@ export const PlaylistDetailSongListTable = forwardRef<any, PlaylistDetailSongLis
             };
         }, []);
 
-        return (
+        const effectiveColumns = useMemo(() => {
+            if (albumGroupingEnabled) return columns;
+            return columns.filter((col) => col.id !== TableColumn.ALBUM_GROUP);
+        }, [columns, albumGroupingEnabled]);
+
+        const isPaginated =
+            typeof currentPage === 'number' &&
+            typeof itemsPerPage === 'number' &&
+            typeof onPageChange === 'function';
+        const totalCount = songData.length;
+        const pageCount = Math.max(1, Math.ceil(totalCount / (itemsPerPage ?? 1)));
+        const paginatedData = useMemo(() => {
+            if (!isPaginated || currentPage == null || itemsPerPage == null) return songData;
+            const start = currentPage * itemsPerPage;
+            return songData.slice(start, start + itemsPerPage);
+        }, [isPaginated, currentPage, itemsPerPage, songData]);
+        const dataToRender = isPaginated ? paginatedData : songData;
+
+        const table = (
             <ItemTableList
                 activeRowId={currentSong?.id}
                 autoFitColumns={autoFitColumns}
                 CellComponent={ItemTableListColumn}
-                columns={columns}
-                data={songData}
+                columns={effectiveColumns}
+                data={dataToRender}
                 enableAlternateRowColors={enableAlternateRowColors}
                 enableExpansion={false}
+                enableHeader={enableHeader}
                 enableHorizontalBorders={enableHorizontalBorders}
                 enableRowHoverHighlight={enableRowHoverHighlight}
                 enableSelection={enableSelection}
@@ -133,6 +167,22 @@ export const PlaylistDetailSongListTable = forwardRef<any, PlaylistDetailSongLis
                 size={size}
             />
         );
+
+        if (isPaginated && itemsPerPage != null) {
+            return (
+                <ItemListWithPagination
+                    currentPage={currentPage!}
+                    itemsPerPage={itemsPerPage}
+                    onChange={onPageChange!}
+                    pageCount={pageCount}
+                    totalItemCount={totalCount}
+                >
+                    {table}
+                </ItemListWithPagination>
+            );
+        }
+
+        return table;
     },
 );
 
@@ -143,6 +193,7 @@ export const PlaylistDetailSongListEditTable = forwardRef<any, PlaylistDetailSon
             columns,
             data,
             enableAlternateRowColors = false,
+            enableHeader = true,
             enableHorizontalBorders = false,
             enableRowHoverHighlight = true,
             enableSelection = true,
@@ -205,6 +256,7 @@ export const PlaylistDetailSongListEditTable = forwardRef<any, PlaylistDetailSon
                 enableAlternateRowColors={enableAlternateRowColors}
                 enableDrag
                 enableExpansion={false}
+                enableHeader={enableHeader}
                 enableHorizontalBorders={enableHorizontalBorders}
                 enableRowHoverHighlight={enableRowHoverHighlight}
                 enableSelection={enableSelection}

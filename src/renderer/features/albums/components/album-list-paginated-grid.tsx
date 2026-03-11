@@ -8,7 +8,9 @@ import { ItemGridList } from '/@/renderer/components/item-list/item-grid-list/it
 import { ItemListWithPagination } from '/@/renderer/components/item-list/item-list-pagination/item-list-pagination';
 import { useItemListPagination } from '/@/renderer/components/item-list/item-list-pagination/use-item-list-pagination';
 import { ItemListGridComponentProps } from '/@/renderer/components/item-list/types';
+import { useListContext } from '/@/renderer/context/list-context';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
+import { useGeneralSettings } from '/@/renderer/store';
 import {
     AlbumListQuery,
     AlbumListSort,
@@ -31,18 +33,19 @@ export const AlbumListPaginatedGrid = ({
     serverId,
     size,
 }: AlbumListPaginatedGridProps) => {
+    const { pageKey } = useListContext();
+    const { currentPage, onChange } = useItemListPagination();
+
     const listCountQuery = albumQueries.listCount({
-        query: { ...query },
+        query: { ...query, limit: itemsPerPage },
         serverId: serverId,
     }) as UseSuspenseQueryOptions<number, Error, number, readonly unknown[]>;
 
     const listQueryFn = api.controller.getAlbumList;
 
-    const { currentPage, onChange } = useItemListPagination();
-
     const { data, pageCount, totalItemCount } = useItemListPaginatedLoader({
         currentPage,
-        eventKey: ItemListKey.ALBUM,
+        eventKey: pageKey || ItemListKey.ALBUM,
         itemsPerPage,
         itemType: LibraryItem.ALBUM,
         listCountQuery,
@@ -55,7 +58,8 @@ export const AlbumListPaginatedGrid = ({
         enabled: saveScrollOffset,
     });
 
-    const rows = useGridRows(LibraryItem.ALBUM, ItemListKey.ALBUM);
+    const rows = useGridRows(LibraryItem.ALBUM, ItemListKey.ALBUM, size);
+    const { enableGridMultiSelect } = useGeneralSettings();
 
     return (
         <ItemListWithPagination
@@ -69,6 +73,7 @@ export const AlbumListPaginatedGrid = ({
                 currentPage={currentPage}
                 data={data || []}
                 enableExpansion
+                enableMultiSelect={enableGridMultiSelect}
                 gap={gap}
                 initialTop={{
                     to: scrollOffset ?? 0,

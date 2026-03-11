@@ -7,14 +7,15 @@ import '@mantine/core/styles.css';
 import '@mantine/dates/styles.css';
 import '@mantine/notifications/styles.css';
 import isElectron from 'is-electron';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 import i18n from '/@/i18n/i18n';
+import { openSettingsModal } from '/@/renderer/features/settings/utils/open-settings-modal';
 import { WebAudioContext } from '/@/renderer/features/player/context/webaudio-context';
+import { useCheckForUpdates } from '/@/renderer/hooks/use-check-for-updates';
 import { useSyncSettingsToMain } from '/@/renderer/hooks/use-sync-settings-to-main';
-import { ReleaseNotesModal } from './release-notes-modal';
 import { AppRouter } from '/@/renderer/router/app-router';
-import { useCssSettings, useHotkeySettings, useSettingsStore } from '/@/renderer/store';
+import { useCssSettings, useHotkeySettings, useLanguage } from '/@/renderer/store';
 import { useAppTheme } from '/@/renderer/themes/use-app-theme';
 import { sanitizeCss } from '/@/renderer/utils/sanitize';
 import { WebAudio } from '/@/shared/types/types';
@@ -22,17 +23,30 @@ import '/@/shared/styles/global.css';
 import { PlayerProvider } from '/@/renderer/features/player/context/player-context';
 import { AudioPlayers } from '/@/renderer/features/player/components/audio-players';
 
+const ReleaseNotesModal = lazy(() =>
+    import('./release-notes-modal').then((module) => ({
+        default: module.ReleaseNotesModal,
+    })),
+);
+
+const UpdateAvailableDialog = lazy(() =>
+    import('./update-available-dialog').then((module) => ({
+        default: module.UpdateAvailableDialog,
+    })),
+);
+
 const ipc = isElectron() ? window.api.ipc : null;
 
 export const App = () => {
     const { mode, theme } = useAppTheme();
-    const language = useSettingsStore((store) => store.general.language);
+    const language = useLanguage();
 
     const { content, enabled } = useCssSettings();
     const { bindings } = useHotkeySettings();
     const cssRef = useRef<HTMLStyleElement | null>(null);
 
     useSyncSettingsToMain();
+    useCheckForUpdates();
 
     const [webAudio, setWebAudio] = useState<WebAudio>();
 
@@ -72,16 +86,34 @@ export const App = () => {
         }
     }, [language]);
 
+    useEffect(() => {
+        if (isElectron()) {
+            window.api.utils.rendererOpenSettings(() => {
+                openSettingsModal();
+            });
+
+            return () => {
+                ipc?.removeAllListeners('renderer-open-settings');
+            };
+        }
+        return undefined;
+    }, []);
+
+    const notificationStyles = useMemo(
+        () => ({
+            root: {
+                marginBottom: 90,
+            },
+        }),
+        [],
+    );
+
     return (
         <MantineProvider forceColorScheme={mode} theme={theme}>
             <Notifications
                 containerWidth="300px"
                 position="bottom-center"
-                styles={{
-                    root: {
-                        marginBottom: 90,
-                    },
-                }}
+                styles={notificationStyles}
                 zIndex={50000}
             />
             <WebAudioContext.Provider value={webAudioProvider}>
@@ -90,7 +122,10 @@ export const App = () => {
                     <AppRouter />
                 </PlayerProvider>
             </WebAudioContext.Provider>
-            <ReleaseNotesModal />
+            <Suspense fallback={null}>
+                <ReleaseNotesModal />
+                <UpdateAvailableDialog />
+            </Suspense>
         </MantineProvider>
     );
 };

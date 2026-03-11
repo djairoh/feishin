@@ -2,7 +2,8 @@ import { t } from 'i18next';
 import isElectron from 'is-electron';
 import { useCallback, useEffect } from 'react';
 
-import { usePlayerActions } from '/@/renderer/store';
+import { useIsRadioActive } from '/@/renderer/features/radio/hooks/use-radio-player';
+import { usePlayerActions, useVolumeWheelStep } from '/@/renderer/store';
 import { toast } from '/@/shared/components/toast/toast';
 
 const mpvPlayer = isElectron() ? window.api.mpvPlayer : null;
@@ -10,6 +11,8 @@ const mpvPlayerListener = isElectron() ? window.api.mpvPlayerListener : null;
 const ipc = isElectron() ? window.api.ipc : null;
 
 export const useMainPlayerListener = () => {
+    const isRadioActive = useIsRadioActive();
+    const volumeWheelStep = useVolumeWheelStep();
     const {
         decreaseVolume,
         increaseVolume,
@@ -46,27 +49,39 @@ export const useMainPlayerListener = () => {
         }
 
         mpvPlayerListener.rendererPlayPause(() => {
-            mediaTogglePlayPause();
+            if (!isRadioActive) {
+                mediaTogglePlayPause();
+            }
         });
 
         mpvPlayerListener.rendererNext(() => {
-            mediaNext();
+            if (!isRadioActive) {
+                mediaNext();
+            }
         });
 
         mpvPlayerListener.rendererPrevious(() => {
-            mediaPrevious();
+            if (!isRadioActive) {
+                mediaPrevious();
+            }
         });
 
         mpvPlayerListener.rendererPlay(() => {
-            mediaPlay();
+            if (!isRadioActive) {
+                mediaPlay();
+            }
         });
 
         mpvPlayerListener.rendererPause(() => {
-            mediaPause();
+            if (!isRadioActive) {
+                mediaPause();
+            }
         });
 
         mpvPlayerListener.rendererStop(() => {
-            mediaStop();
+            if (!isRadioActive) {
+                mediaStop();
+            }
         });
 
         mpvPlayerListener.rendererSkipForward(() => {
@@ -90,11 +105,11 @@ export const useMainPlayerListener = () => {
         });
 
         mpvPlayerListener.rendererVolumeUp(() => {
-            increaseVolume(1);
+            increaseVolume(volumeWheelStep);
         });
 
         mpvPlayerListener.rendererVolumeDown(() => {
-            decreaseVolume(1);
+            decreaseVolume(volumeWheelStep);
         });
 
         mpvPlayerListener.rendererError((_event: any, message: string) => {
@@ -121,6 +136,7 @@ export const useMainPlayerListener = () => {
         decreaseVolume,
         handleMpvError,
         increaseVolume,
+        isRadioActive,
         mediaAutoNext,
         mediaNext,
         mediaPause,
@@ -133,5 +149,22 @@ export const useMainPlayerListener = () => {
         mediaTogglePlayPause,
         toggleRepeat,
         toggleShuffle,
+        volumeWheelStep,
     ]);
+};
+
+const MainPlayerListenerHookInner = () => {
+    useMainPlayerListener();
+    return null;
+};
+
+export const MainPlayerListenerHook = () => {
+    const isElectronEnv = isElectron();
+    const mpvPlayerListener = isElectronEnv ? window.api.mpvPlayerListener : null;
+
+    if (mpvPlayerListener === null) {
+        return null;
+    }
+
+    return <MainPlayerListenerHookInner />;
 };

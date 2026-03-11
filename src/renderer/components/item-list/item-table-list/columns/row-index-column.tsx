@@ -1,5 +1,4 @@
 import clsx from 'clsx';
-import { memo } from 'react';
 
 import styles from './row-index-column.module.css';
 
@@ -8,6 +7,7 @@ import {
     TableColumnContainer,
     TableColumnTextContainer,
 } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
+import { useIsActiveRow } from '/@/renderer/components/item-list/item-table-list/item-table-list-context';
 import { ItemListItem } from '/@/renderer/components/item-list/types';
 import { usePlayerStatus } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
@@ -17,7 +17,7 @@ import { Text } from '/@/shared/components/text/text';
 import { LibraryItem, QueueSong } from '/@/shared/types/domain-types';
 import { PlayerStatus } from '/@/shared/types/types';
 
-export const RowIndexColumn = (props: ItemTableListInnerColumn) => {
+const RowIndexColumnBase = (props: ItemTableListInnerColumn) => {
     const { itemType } = props;
 
     switch (itemType) {
@@ -31,9 +31,10 @@ export const RowIndexColumn = (props: ItemTableListInnerColumn) => {
     }
 };
 
+export const RowIndexColumn = RowIndexColumnBase;
+
 const DefaultRowIndexColumn = (props: ItemTableListInnerColumn) => {
     const {
-        adjustedRowIndexMap,
         controls,
         data,
         enableExpansion,
@@ -45,7 +46,9 @@ const DefaultRowIndexColumn = (props: ItemTableListInnerColumn) => {
     } = props;
 
     let adjustedRowIndex =
-        adjustedRowIndexMap?.get(rowIndex) ?? (enableHeader ? rowIndex : rowIndex + 1);
+        props.getAdjustedRowIndex?.(rowIndex) ??
+        props.adjustedRowIndexMap?.get(rowIndex) ??
+        (enableHeader ? rowIndex : rowIndex + 1);
 
     if (startRowIndex !== undefined && adjustedRowIndex > 0) {
         adjustedRowIndex = startRowIndex + adjustedRowIndex;
@@ -59,7 +62,9 @@ const DefaultRowIndexColumn = (props: ItemTableListInnerColumn) => {
                     icon="arrowDownS"
                     iconProps={{ color: 'muted', size: 'md' }}
                     onClick={(e) => {
-                        const item = data[rowIndex] as ItemListItem;
+                        e.stopPropagation();
+                        const item = (props.getRowItem?.(rowIndex) ??
+                            data[rowIndex]) as ItemListItem;
                         const rowId = internalState.extractRowId(item);
                         const index = rowId ? internalState.findItemIndex(rowId) : -1;
                         controls.onExpand?.({
@@ -85,14 +90,13 @@ const DefaultRowIndexColumn = (props: ItemTableListInnerColumn) => {
 
 const QueueSongRowIndexColumn = (props: ItemTableListInnerColumn) => {
     const status = usePlayerStatus();
-    const song = props.data[props.rowIndex] as QueueSong;
-    const isActive =
-        !!props.activeRowId &&
-        (props.activeRowId === song?.id || props.activeRowId === song?._uniqueId);
+    const song = (props.getRowItem?.(props.rowIndex) ?? props.data[props.rowIndex]) as QueueSong;
+    const isActive = useIsActiveRow(song?.id, song?._uniqueId);
 
     const isActiveAndPlaying = isActive && status === PlayerStatus.PLAYING;
 
     let adjustedRowIndex =
+        props.getAdjustedRowIndex?.(props.rowIndex) ??
         props.adjustedRowIndexMap?.get(props.rowIndex) ??
         (props.enableHeader ? props.rowIndex : props.rowIndex + 1);
 
@@ -110,30 +114,28 @@ const QueueSongRowIndexColumn = (props: ItemTableListInnerColumn) => {
     );
 };
 
-const InnerQueueSongRowIndexColumn = memo(
-    (
-        props: ItemTableListInnerColumn & {
-            adjustedRowIndex: number;
-            isActive: boolean;
-            isPlaying: boolean;
-        },
-    ) => {
-        return (
-            <TableColumnTextContainer {...props}>
-                {props.isActive ? (
-                    props.isPlaying ? (
-                        <Flex>
-                            <Icon fill="primary" icon="mediaPlay" />
-                        </Flex>
-                    ) : (
-                        <Flex>
-                            <Icon fill="primary" icon="mediaPause" />
-                        </Flex>
-                    )
-                ) : (
-                    props.adjustedRowIndex
-                )}
-            </TableColumnTextContainer>
-        );
+const InnerQueueSongRowIndexColumn = (
+    props: ItemTableListInnerColumn & {
+        adjustedRowIndex: number;
+        isActive: boolean;
+        isPlaying: boolean;
     },
-);
+) => {
+    return (
+        <TableColumnTextContainer {...props}>
+            {props.isActive ? (
+                props.isPlaying ? (
+                    <Flex>
+                        <Icon fill="primary" icon="mediaPlay" />
+                    </Flex>
+                ) : (
+                    <Flex>
+                        <Icon fill="primary" icon="mediaPause" />
+                    </Flex>
+                )
+            ) : (
+                props.adjustedRowIndex
+            )}
+        </TableColumnTextContainer>
+    );
+};

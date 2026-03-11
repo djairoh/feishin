@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import { motion } from 'motion/react';
-import { type ComponentType, forwardRef } from 'react';
+import { type ComponentType, forwardRef, memo, useMemo } from 'react';
 import { IconBaseProps } from 'react-icons';
 import { FaLastfmSquare } from 'react-icons/fa';
 import {
@@ -21,6 +21,7 @@ import {
     LuArrowUpNarrowWide,
     LuArrowUpToLine,
     LuBookOpen,
+    LuBraces,
     LuCheck,
     LuChevronDown,
     LuChevronLast,
@@ -32,6 +33,7 @@ import {
     LuClipboardCopy,
     LuClock3,
     LuCloudDownload,
+    LuCornerDownRight,
     LuCornerUpRight,
     LuDelete,
     LuDisc,
@@ -39,6 +41,7 @@ import {
     LuDownload,
     LuEllipsis,
     LuEllipsisVertical,
+    LuExpand,
     LuExternalLink,
     LuFileJson,
     LuFlag,
@@ -57,6 +60,7 @@ import {
     LuInfo,
     LuKeyboard,
     LuLayoutGrid,
+    LuLayoutList,
     LuLibrary,
     LuList,
     LuListFilter,
@@ -74,6 +78,7 @@ import {
     LuMoon,
     LuMusic,
     LuMusic2,
+    LuPackage2,
     LuPanelRightClose,
     LuPanelRightOpen,
     LuPause,
@@ -102,6 +107,8 @@ import {
     LuStepForward,
     LuSun,
     LuTable,
+    LuTimer,
+    LuTimerOff,
     LuTriangleAlert,
     LuUpload,
     LuUser,
@@ -112,6 +119,7 @@ import {
     LuVolumeX,
     LuWifi,
     LuWifiOff,
+    LuWrench,
     LuX,
 } from 'react-icons/lu';
 import { MdOutlineVisibility, MdOutlineVisibilityOff } from 'react-icons/md';
@@ -151,6 +159,7 @@ export const AppIcon = {
     cache: LuCloudDownload,
     check: LuCheck,
     clipboardCopy: LuClipboardCopy,
+    collection: LuPackage2,
     delete: LuDelete,
     disc: LuDisc,
     download: LuDownload,
@@ -168,20 +177,24 @@ export const AppIcon = {
     emptyPlaylistImage: LuListMusic,
     emptySongImage: LuMusic,
     error: LuShieldAlert,
+    expand: LuExpand,
     externalLink: LuExternalLink,
     favorite: LuHeart,
     fileJson: LuFileJson,
     filter: LuListFilter,
     folder: LuFolderOpen,
     genre: LuFlag,
+    goToItem: LuCornerDownRight,
     hash: LuHash,
     home: LuSquareMenu,
     image: LuImage,
     info: LuInfo,
     itemAlbum: LuDisc3,
     itemSong: LuMusic,
+    json: LuBraces,
     keyboard: LuKeyboard,
     lastPlayed: LuHeadphones,
+    layoutDetail: LuLayoutList,
     layoutGrid: LuLayoutGrid,
     layoutList: LuList,
     layoutTable: LuTable,
@@ -219,6 +232,7 @@ export const AppIcon = {
     playlistAdd: LuListPlus,
     playlistDelete: LuListMinus,
     plus: LuPlus,
+    queryBuilder: LuWrench,
     queue: LuList,
     radio: LuRadio,
     refresh: LuRotateCw,
@@ -231,6 +245,8 @@ export const AppIcon = {
     share: LuShare2,
     signIn: LuLogIn,
     signOut: LuLogOut,
+    sleepTimer: LuTimer,
+    sleepTimerOff: LuTimerOff,
     sort: LuArrowUpDown,
     sortAsc: LuArrowUpNarrowWide,
     sortDesc: LuArrowDownWideNarrow,
@@ -278,19 +294,23 @@ type IconColor =
     | 'success'
     | 'warn';
 
-export const Icon = forwardRef<HTMLDivElement, IconProps>((props, ref) => {
+const _Icon = forwardRef<HTMLDivElement, IconProps>((props, ref) => {
     const { animate, className, color, fill, icon, size = 'md' } = props;
 
     const IconComponent: ComponentType<any> = AppIcon[icon];
 
-    const classNames = clsx(className, {
-        [styles.fill]: true,
-        [styles.pulse]: animate === 'pulse',
-        [styles.spin]: animate === 'spin',
-        [styles[`color-${color || fill}`]]: color || fill,
-        [styles[`fill-${fill}`]]: fill,
-        [styles[`size-${size}`]]: true,
-    });
+    const classNames = useMemo(
+        () =>
+            clsx(className, {
+                [styles.fill]: true,
+                [styles.pulse]: animate === 'pulse',
+                [styles.spin]: animate === 'spin',
+                [styles[`color-${color || fill}`]]: color || fill,
+                [styles[`fill-${fill}`]]: fill,
+                [styles[`size-${size}`]]: true,
+            }),
+        [animate, className, color, fill, size],
+    );
 
     return (
         <IconComponent
@@ -301,6 +321,10 @@ export const Icon = forwardRef<HTMLDivElement, IconProps>((props, ref) => {
         />
     );
 });
+
+_Icon.displayName = 'Icon';
+
+export const Icon = memo(_Icon);
 
 Icon.displayName = 'Icon';
 

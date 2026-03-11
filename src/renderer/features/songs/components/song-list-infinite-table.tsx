@@ -8,6 +8,7 @@ import { useItemListScrollPersist } from '/@/renderer/components/item-list/helpe
 import { ItemTableList } from '/@/renderer/components/item-list/item-table-list/item-table-list';
 import { ItemTableListColumn } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { ItemListTableComponentProps } from '/@/renderer/components/item-list/types';
+import { useListContext } from '/@/renderer/context/list-context';
 import { songsQueries } from '/@/renderer/features/songs/api/songs-api';
 import { usePlayerSong } from '/@/renderer/store';
 import { LibraryItem, SongListQuery, SongListSort, SortOrder } from '/@/shared/types/domain-types';
@@ -19,6 +20,7 @@ export const SongListInfiniteTable = ({
     autoFitColumns = false,
     columns,
     enableAlternateRowColors = false,
+    enableHeader = true,
     enableHorizontalBorders = false,
     enableRowHoverHighlight = true,
     enableSelection = true,
@@ -33,21 +35,23 @@ export const SongListInfiniteTable = ({
     size = 'default',
 }: SongListInfiniteTableProps) => {
     const listCountQuery = songsQueries.listCount({
-        query: { ...query },
+        query: { ...query, limit: itemsPerPage },
         serverId: serverId,
     }) as UseSuspenseQueryOptions<number, Error, number, readonly unknown[]>;
 
     const listQueryFn = api.controller.getSongList;
+    const { pageKey } = useListContext();
 
-    const { data, onRangeChanged } = useItemListInfiniteLoader({
-        eventKey: ItemListKey.SONG,
-        itemsPerPage,
-        itemType: LibraryItem.SONG,
-        listCountQuery,
-        listQueryFn,
-        query,
-        serverId,
-    });
+    const { getItem, getItemIndex, itemCount, loadedItems, onRangeChanged } =
+        useItemListInfiniteLoader({
+            eventKey: pageKey || ItemListKey.SONG,
+            itemsPerPage,
+            itemType: LibraryItem.SONG,
+            listCountQuery,
+            listQueryFn,
+            query,
+            serverId,
+        });
 
     const { handleOnScrollEnd, scrollOffset } = useItemListScrollPersist({
         enabled: saveScrollOffset,
@@ -69,17 +73,21 @@ export const SongListInfiniteTable = ({
             autoFitColumns={autoFitColumns}
             CellComponent={ItemTableListColumn}
             columns={columns}
-            data={data}
+            data={loadedItems}
             enableAlternateRowColors={enableAlternateRowColors}
             enableExpansion={false}
+            enableHeader={enableHeader}
             enableHorizontalBorders={enableHorizontalBorders}
             enableRowHoverHighlight={enableRowHoverHighlight}
             enableSelection={enableSelection}
             enableVerticalBorders={enableVerticalBorders}
+            getItem={getItem}
+            getItemIndex={getItemIndex}
             initialTop={{
                 to: scrollOffset ?? 0,
                 type: 'offset',
             }}
+            itemCount={itemCount}
             itemType={LibraryItem.SONG}
             onColumnReordered={handleColumnReordered}
             onColumnResized={handleColumnResized}

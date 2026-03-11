@@ -126,7 +126,13 @@ const DummyAlbumDetailRoute = () => {
                 <Stack>
                     <LibraryHeader
                         imageUrl={imageUrl}
-                        item={{ route: AppRoute.LIBRARY_SONGS, type: LibraryItem.SONG }}
+                        item={{
+                            explicitStatus: detailQuery?.data?.explicitStatus ?? null,
+                            imageId: detailQuery?.data?.imageId,
+                            imageUrl: detailQuery?.data?.imageUrl,
+                            route: AppRoute.LIBRARY_SONGS,
+                            type: LibraryItem.SONG,
+                        }}
                         loading={!background || colorId !== albumId}
                         title={detailQuery?.data?.name || ''}
                     >

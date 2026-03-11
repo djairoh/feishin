@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './server-selector.module.css';
 
-import { useRadioStore } from '/@/renderer/features/radio/hooks/use-radio-player';
 import JellyfinLogo from '/@/renderer/features/servers/assets/jellyfin.png';
 import NavidromeLogo from '/@/renderer/features/servers/assets/navidrome.png';
 import OpenSubsonicLogo from '/@/renderer/features/servers/assets/opensubsonic.png';
@@ -16,6 +15,7 @@ import { Box } from '/@/shared/components/box/box';
 import { DropdownMenu } from '/@/shared/components/dropdown-menu/dropdown-menu';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
+import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 import { ServerType } from '/@/shared/types/domain-types';
@@ -25,8 +25,7 @@ export const ServerSelector = () => {
     const { t } = useTranslation();
     const currentServer = useCurrentServer();
     const sidebarImageEnabled = useAppStore((state) => state.sidebar.image);
-    const isRadioPlaying = useRadioStore((state) => state.isPlaying);
-    const showImage = sidebarImageEnabled && !isRadioPlaying;
+    const showImage = sidebarImageEnabled;
 
     const { data: musicFolders } = useQuery(
         currentServer
@@ -70,7 +69,7 @@ export const ServerSelector = () => {
               : OpenSubsonicLogo;
 
     return (
-        <DropdownMenu offset={0} position="top">
+        <DropdownMenu offset={0} position="right">
             <DropdownMenu.Target>
                 <div className={styles.popoverTarget}>
                     <Box
@@ -94,7 +93,9 @@ export const ServerSelector = () => {
                 </div>
             </DropdownMenu.Target>
             <DropdownMenu.Dropdown style={{ width: `${widthOfTarget}px` }}>
-                <ServerSelectorItems />
+                <ScrollArea className={styles.scrollArea}>
+                    <ServerSelectorItems />
+                </ScrollArea>
             </DropdownMenu.Dropdown>
         </DropdownMenu>
     );

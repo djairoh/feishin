@@ -120,9 +120,17 @@ button {
 }
 
 @font-face {
+    font-family: Symbola;
+    src: url('../../../assets/fonts/Symbola.woff2');
+    font-display: swap;
+}
+
+
+@font-face {
     font-family: Inter;
     font-weight: 100 1000;
-    src: url('../../../assets/fonts/Inter-VariableFont_slnt,wght.woff2');
+    src: url('../../../assets/fonts/Inter-VariableFont_opsz,wght.woff2');
+    font-display: swap;
 }
 
 @font-face {
@@ -211,6 +219,46 @@ button {
     font-weight: 800 1000;
     src: url('../../../assets/fonts/NotoSansJP-VariableFont_wght.woff2');
     unicode-range: U+3000-9FFF, U+FF00-FFEF; /* Japanese characters */
+}
+
+@font-face {
+    font-family: 'Noto Sans Hebrew';
+    font-variation-settings: 'wght' 500;
+    font-weight: 400;
+    src: url('../../../assets/fonts/NotoSansHebrew-VariableFont_wdth,wght.woff2');
+    unicode-range: U+0590-05FF, U+FB1D-FB4F; /* Hebrew characters */
+}
+
+@font-face {
+    font-family: 'Noto Sans Hebrew';
+    font-variation-settings: 'wght' 600;
+    font-weight: 500;
+    src: url('../../../assets/fonts/NotoSansHebrew-VariableFont_wdth,wght.woff2');
+    unicode-range: U+0590-05FF, U+FB1D-FB4F; /* Hebrew characters */
+}
+
+@font-face {
+    font-family: 'Noto Sans Hebrew';
+    font-variation-settings: 'wght' 700;
+    font-weight: 600;
+    src: url('../../../assets/fonts/NotoSansHebrew-VariableFont_wdth,wght.woff2');
+    unicode-range: U+0590-05FF, U+FB1D-FB4F; /* Hebrew characters */
+}
+
+@font-face {
+    font-family: 'Noto Sans Hebrew';
+    font-variation-settings: 'wght' 800;
+    font-weight: 700;
+    src: url('../../../assets/fonts/NotoSansHebrew-VariableFont_wdth,wght.woff2');
+    unicode-range: U+0590-05FF, U+FB1D-FB4F; /* Hebrew characters */
+}
+
+@font-face {
+    font-family: 'Noto Sans Hebrew';
+    font-variation-settings: 'wght' 900;
+    font-weight: 800 1000;
+    src: url('../../../assets/fonts/NotoSansHebrew-VariableFont_wdth,wght.woff2');
+    unicode-range: U+0590-05FF, U+FB1D-FB4F; /* Hebrew characters */
 }
 
 :root {

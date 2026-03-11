@@ -10,22 +10,29 @@ import {
 } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { disableNativeDragPreview } from '@atlaskit/pragmatic-drag-and-drop/element/disable-native-drag-preview';
 import clsx from 'clsx';
-import React, { CSSProperties, ReactElement, ReactNode, useEffect, useRef, useState } from 'react';
+import React, {
+    CSSProperties,
+    memo,
+    ReactElement,
+    ReactNode,
+    useEffect,
+    useRef,
+    useState,
+} from 'react';
 import { useParams } from 'react-router';
 import { CellComponentProps } from 'react-window-v2';
 
 import styles from './item-table-list-column.module.css';
 
 import i18n from '/@/i18n/i18n';
-import { getDraggedItems } from '/@/renderer/components/item-list/helpers/get-dragged-items';
-import {
-    useItemDraggingState,
-    useItemSelectionState,
-} from '/@/renderer/components/item-list/helpers/item-list-state';
+import { useItemSelectionState } from '/@/renderer/components/item-list/helpers/item-list-state';
+import { isNoHorizontalPaddingColumn } from '/@/renderer/components/item-list/item-detail-list/utils';
 import { ActionsColumn } from '/@/renderer/components/item-list/item-table-list/columns/actions-column';
 import { AlbumArtistsColumn } from '/@/renderer/components/item-list/item-table-list/columns/album-artists-column';
 import { AlbumColumn } from '/@/renderer/components/item-list/item-table-list/columns/album-column';
+import { AlbumGroupColumn } from '/@/renderer/components/item-list/item-table-list/columns/album-group-column';
 import { ArtistsColumn } from '/@/renderer/components/item-list/item-table-list/columns/artists-column';
+import { ComposerColumn } from '/@/renderer/components/item-list/item-table-list/columns/composer-column';
 import { CountColumn } from '/@/renderer/components/item-list/item-table-list/columns/count-column';
 import {
     AbsoluteDateColumn,
@@ -45,29 +52,26 @@ import { RatingColumn } from '/@/renderer/components/item-list/item-table-list/c
 import { RowIndexColumn } from '/@/renderer/components/item-list/item-table-list/columns/row-index-column';
 import { SizeColumn } from '/@/renderer/components/item-list/item-table-list/columns/size-column';
 import { TextColumn } from '/@/renderer/components/item-list/item-table-list/columns/text-column';
+import { TitleArtistColumn } from '/@/renderer/components/item-list/item-table-list/columns/title-artist-column';
 import { TitleColumn } from '/@/renderer/components/item-list/item-table-list/columns/title-column';
 import { TitleCombinedColumn } from '/@/renderer/components/item-list/item-table-list/columns/title-combined-column';
+import { YearColumn } from '/@/renderer/components/item-list/item-table-list/columns/year-column';
+import { useItemDragDropState } from '/@/renderer/components/item-list/item-table-list/hooks/use-item-drag-drop-state';
 import { TableItemProps } from '/@/renderer/components/item-list/item-table-list/item-table-list';
 import { ItemControls, ItemListItem } from '/@/renderer/components/item-list/types';
-import { eventEmitter } from '/@/renderer/events/event-emitter';
-import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
 import { Flex } from '/@/shared/components/flex/flex';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Skeleton } from '/@/shared/components/skeleton/skeleton';
 import { Text } from '/@/shared/components/text/text';
 import { useDoubleClick } from '/@/shared/hooks/use-double-click';
 import { useMergedRef } from '/@/shared/hooks/use-merged-ref';
-import { Folder, LibraryItem, QueueSong, Song } from '/@/shared/types/domain-types';
-import {
-    dndUtils,
-    DragData,
-    DragOperation,
-    DragTarget,
-    DragTargetMap,
-} from '/@/shared/types/drag-and-drop';
+import { LibraryItem } from '/@/shared/types/domain-types';
+import { dndUtils, DragData, DragOperation, DragTarget } from '/@/shared/types/drag-and-drop';
 import { TableColumn } from '/@/shared/types/types';
 
-export interface ItemTableListColumn extends CellComponentProps<TableItemProps> {}
+export interface ItemTableListColumn extends CellComponentProps<TableItemProps> {
+    columnType?: TableColumn;
+}
 
 export interface ItemTableListInnerColumn extends ItemTableListColumn {
     controls: ItemControls;
@@ -77,13 +81,15 @@ export interface ItemTableListInnerColumn extends ItemTableListColumn {
     type: TableColumn;
 }
 
-export const ItemTableListColumn = (props: ItemTableListColumn) => {
+const ItemTableListColumnBase = (props: ItemTableListColumn) => {
     const { playlistId } = useParams() as { playlistId?: string };
-    const type = props.columns[props.columnIndex].id as TableColumn;
+    const type = props.columnType ?? (props.columns[props.columnIndex].id as TableColumn);
 
     const isHeaderEnabled = !!props.enableHeader;
     const isDataRow = isHeaderEnabled ? props.rowIndex > 0 : true;
-    const item = isDataRow ? props.data[props.rowIndex] : null;
+    const item = isDataRow
+        ? (props.getRowItem?.(props.rowIndex) ?? props.data[props.rowIndex])
+        : null;
     const shouldEnableDrag = !!props.enableDrag && isDataRow && !!item;
     const itemType = (item as unknown as { _itemType?: LibraryItem })?._itemType || props.itemType;
 
@@ -92,310 +98,45 @@ export const ItemTableListColumn = (props: ItemTableListColumn) => {
     // to maintain proper styling and row heights
     let groupHeader: 'GROUP_HEADER' | null | ReactElement = null;
     if (props.groups && isDataRow && props.groups.length > 0) {
-        // Calculate which group this row index belongs to
-        let cumulativeDataIndex = 0;
-        const headerOffset = props.enableHeader ? 1 : 0;
+        const groupInfo = props.groupHeaderInfoByRowIndex?.get(props.rowIndex);
+        const group = groupInfo ? props.groups[groupInfo.groupIndex] : undefined;
 
-        const originalData = props.data.filter((item) => item !== null);
+        if (groupInfo && group) {
+            // Determine where to render the group header content:
+            // - If pinned left columns exist, render in the first pinned left column
+            // - Otherwise, render in the first column of the main grid
+            const hasPinnedLeftColumns = (props.pinnedLeftColumnCount || 0) > 0;
+            const isFirstPinnedLeftColumn = props.columnIndex === 0 && hasPinnedLeftColumns;
+            const isMainGridFirstColumn =
+                !hasPinnedLeftColumns &&
+                (props.columnIndex === (props.pinnedLeftColumnCount || 0) ||
+                    (props.columnIndex === 0 && (props.pinnedLeftColumnCount || 0) === 0));
 
-        for (let groupIndex = 0; groupIndex < props.groups.length; groupIndex++) {
-            const group = props.groups[groupIndex];
-            const groupHeaderIndex = headerOffset + cumulativeDataIndex + groupIndex;
-
-            if (props.rowIndex === groupHeaderIndex) {
-                // Determine where to render the group header content:
-                // - If pinned left columns exist, render in the first pinned left column
-                // - Otherwise, render in the first column of the main grid
-                const hasPinnedLeftColumns = (props.pinnedLeftColumnCount || 0) > 0;
-                const isFirstPinnedLeftColumn = props.columnIndex === 0 && hasPinnedLeftColumns;
-                const isMainGridFirstColumn =
-                    !hasPinnedLeftColumns &&
-                    (props.columnIndex === (props.pinnedLeftColumnCount || 0) ||
-                        (props.columnIndex === 0 && (props.pinnedLeftColumnCount || 0) === 0));
-
-                // Render group header content in the first pinned left column (if exists) or first main grid column
-                if (isFirstPinnedLeftColumn || isMainGridFirstColumn) {
-                    groupHeader = group.render({
-                        data: originalData,
-                        groupIndex,
-                        index: props.rowIndex,
-                        internalState: props.internalState,
-                        startDataIndex: cumulativeDataIndex,
-                    });
-                } else {
-                    // For other columns, mark as group header row for styled rendering
-                    groupHeader = 'GROUP_HEADER';
-                }
-                break;
+            // Render group header content in the first pinned left column (if exists) or first main grid column
+            if (isFirstPinnedLeftColumn || isMainGridFirstColumn) {
+                groupHeader = group.render({
+                    data: props.getGroupRenderData?.() ?? [],
+                    groupIndex: groupInfo.groupIndex,
+                    index: props.rowIndex,
+                    internalState: props.internalState,
+                    startDataIndex: groupInfo.startDataIndex,
+                });
+            } else {
+                // For other columns, mark as group header row for styled rendering
+                groupHeader = 'GROUP_HEADER';
             }
-
-            cumulativeDataIndex += group.itemCount;
         }
     }
 
-    const {
-        isDraggedOver,
-        isDragging: isDraggingLocal,
-        ref: dragRef,
-    } = useDragDrop<HTMLDivElement>({
-        drag: {
-            getId: () => {
-                if (!item || !isDataRow) {
-                    return [];
-                }
-
-                const draggedItems = getDraggedItems(item as any, props.internalState);
-
-                return draggedItems.map((draggedItem) => draggedItem.id);
-            },
-            getItem: () => {
-                if (!item || !isDataRow) {
-                    return [];
-                }
-
-                const draggedItems = getDraggedItems(item as any, props.internalState);
-
-                return draggedItems;
-            },
-            itemType: props.itemType,
-            onDragStart: () => {
-                if (!item || !isDataRow) {
-                    return;
-                }
-
-                const draggedItems = getDraggedItems(item as any, props.internalState);
-                if (props.internalState) {
-                    props.internalState.setDragging(draggedItems);
-                }
-            },
-            onDrop: () => {
-                if (props.internalState) {
-                    props.internalState.setDragging([]);
-                }
-            },
-            operation:
-                props.itemType === LibraryItem.QUEUE_SONG
-                    ? [DragOperation.REORDER, DragOperation.ADD]
-                    : props.itemType === LibraryItem.PLAYLIST_SONG
-                      ? [DragOperation.REORDER, DragOperation.ADD]
-                      : [DragOperation.ADD],
-            target: DragTargetMap[props.itemType] || DragTarget.GENERIC,
-        },
-        drop: {
-            canDrop: (args) => {
-                if (args.source.type === DragTarget.TABLE_COLUMN) {
-                    return false;
-                }
-
-                // Allow drops for QUEUE_SONG (queue reordering)
-                if (props.itemType === LibraryItem.QUEUE_SONG) {
-                    return true;
-                }
-
-                // Allow drops for PLAYLIST_SONG (playlist reordering)
-                // Only allow drops when drag is started from the reorder handle
-                if (
-                    props.itemType === LibraryItem.PLAYLIST_SONG &&
-                    args.source.itemType === LibraryItem.PLAYLIST_SONG &&
-                    args.source.metadata?.fromReorderHandle === true
-                ) {
-                    return true;
-                }
-
-                return false;
-            },
-            getData: () => {
-                return {
-                    id: [(item as unknown as { id: string }).id],
-                    item: [item as unknown as unknown[]],
-                    itemType: props.itemType,
-                    type: DragTargetMap[props.itemType] || DragTarget.GENERIC,
-                };
-            },
-            onDrag: () => {
-                return;
-            },
-            onDragLeave: () => {
-                return;
-            },
-            onDrop: (args) => {
-                if (args.self.type === DragTarget.QUEUE_SONG) {
-                    const sourceServerId = (
-                        args.source.item?.[0] as unknown as { _serverId: string }
-                    )._serverId;
-
-                    const sourceItemType = args.source.itemType as LibraryItem;
-
-                    const droppedOnUniqueId = (
-                        args.self.item?.[0] as unknown as { _uniqueId: string }
-                    )._uniqueId;
-
-                    switch (args.source.type) {
-                        case DragTarget.ALBUM: {
-                            props.playerContext.addToQueueByFetch(
-                                sourceServerId,
-                                args.source.id,
-                                sourceItemType,
-                                { edge: args.edge, uniqueId: droppedOnUniqueId },
-                            );
-                            break;
-                        }
-                        case DragTarget.ALBUM_ARTIST: {
-                            props.playerContext.addToQueueByFetch(
-                                sourceServerId,
-                                args.source.id,
-                                sourceItemType,
-                                { edge: args.edge, uniqueId: droppedOnUniqueId },
-                            );
-                            break;
-                        }
-                        case DragTarget.ARTIST: {
-                            props.playerContext.addToQueueByFetch(
-                                sourceServerId,
-                                args.source.id,
-                                sourceItemType,
-                                { edge: args.edge, uniqueId: droppedOnUniqueId },
-                            );
-                            break;
-                        }
-                        case DragTarget.FOLDER: {
-                            const items = args.source.item;
-
-                            const { folders, songs } = (items || []).reduce<{
-                                folders: Folder[];
-                                songs: Song[];
-                            }>(
-                                (acc, item) => {
-                                    if ((item as unknown as Song)._itemType === LibraryItem.SONG) {
-                                        acc.songs.push(item as unknown as Song);
-                                    } else if (
-                                        (item as unknown as Folder)._itemType === LibraryItem.FOLDER
-                                    ) {
-                                        acc.folders.push(item as unknown as Folder);
-                                    }
-                                    return acc;
-                                },
-                                { folders: [], songs: [] },
-                            );
-
-                            const folderIds = folders.map((folder) => folder.id);
-
-                            // Handle folders: fetch and add to queue
-                            if (folderIds.length > 0) {
-                                props.playerContext.addToQueueByFetch(
-                                    sourceServerId,
-                                    folderIds,
-                                    LibraryItem.FOLDER,
-                                    { edge: args.edge, uniqueId: droppedOnUniqueId },
-                                );
-                            }
-
-                            // Handle songs: add directly to queue
-                            if (songs.length > 0) {
-                                props.playerContext.addToQueueByData(songs, {
-                                    edge: args.edge,
-                                    uniqueId: droppedOnUniqueId,
-                                });
-                            }
-
-                            break;
-                        }
-                        case DragTarget.GENRE: {
-                            props.playerContext.addToQueueByFetch(
-                                sourceServerId,
-                                args.source.id,
-                                sourceItemType,
-                                { edge: args.edge, uniqueId: droppedOnUniqueId },
-                            );
-                            break;
-                        }
-                        case DragTarget.PLAYLIST: {
-                            props.playerContext.addToQueueByFetch(
-                                sourceServerId,
-                                args.source.id,
-                                sourceItemType,
-                                { edge: args.edge, uniqueId: droppedOnUniqueId },
-                            );
-                            break;
-                        }
-                        case DragTarget.QUEUE_SONG: {
-                            const sourceItems = (args.source.item || []) as QueueSong[];
-                            if (
-                                sourceItems.length > 0 &&
-                                args.edge &&
-                                (args.edge === 'top' || args.edge === 'bottom')
-                            ) {
-                                props.playerContext.moveSelectedTo(
-                                    sourceItems,
-                                    args.edge,
-                                    droppedOnUniqueId,
-                                );
-                            }
-                            break;
-                        }
-                        case DragTarget.SONG: {
-                            const sourceItems = (args.source.item || []) as Song[];
-                            if (sourceItems.length > 0) {
-                                props.playerContext.addToQueueByData(sourceItems, {
-                                    edge: args.edge,
-                                    uniqueId: droppedOnUniqueId,
-                                });
-                            }
-                            break;
-                        }
-                        default: {
-                            break;
-                        }
-                    }
-                }
-
-                // Handle PLAYLIST_SONG reordering
-                // Only allow drops when drag is started from the reorder handle
-                if (
-                    args.self.itemType === LibraryItem.PLAYLIST_SONG &&
-                    args.source.itemType === LibraryItem.PLAYLIST_SONG &&
-                    args.source.metadata?.fromReorderHandle === true &&
-                    playlistId
-                ) {
-                    const sourceItems = (args.source.item || []) as any[];
-                    const targetItem = item as any;
-
-                    if (
-                        sourceItems.length > 0 &&
-                        args.edge &&
-                        (args.edge === 'top' || args.edge === 'bottom') &&
-                        targetItem
-                    ) {
-                        // Emit event to reorder playlist songs
-                        eventEmitter.emit('PLAYLIST_REORDER', {
-                            edge: args.edge,
-                            playlistId,
-                            sourceIds: args.source.id,
-                            targetId: targetItem.id,
-                        });
-                    }
-                }
-
-                if (props.internalState) {
-                    props.internalState.setDragging([]);
-                }
-
-                return;
-            },
-        },
-        isEnabled: shouldEnableDrag,
+    const { dragRef, isDraggedOver, isDragging } = useItemDragDropState({
+        enableDrag: !!props.enableDrag,
+        internalState: props.internalState,
+        isDataRow,
+        item,
+        itemType: props.itemType,
+        playerContext: props.playerContext,
+        playlistId,
     });
-
-    const itemRowId =
-        item && typeof item === 'object' && 'id' in item && props.internalState
-            ? props.internalState.extractRowId(item)
-            : undefined;
-    const isDraggingState = useItemDraggingState(
-        props.internalState,
-        itemRowId ||
-            (item && typeof item === 'object' && 'id' in item ? (item as any).id : undefined),
-    );
-    const isDragging = props.internalState ? isDraggingState : isDraggingLocal;
 
     const controls = props.controls;
 
@@ -473,6 +214,11 @@ export const ItemTableListColumn = (props: ItemTableListColumn) => {
             case TableColumn.SONG_COUNT:
                 return <CountColumn {...props} {...dragProps} controls={controls} type={type} />;
 
+            case TableColumn.ALBUM_GROUP:
+                return (
+                    <AlbumGroupColumn {...props} {...dragProps} controls={controls} type={type} />
+                );
+
             case TableColumn.ARTIST:
                 return <ArtistsColumn {...props} {...dragProps} controls={controls} type={type} />;
 
@@ -487,8 +233,10 @@ export const ItemTableListColumn = (props: ItemTableListColumn) => {
             case TableColumn.DISC_NUMBER:
             case TableColumn.SAMPLE_RATE:
             case TableColumn.TRACK_NUMBER:
-            case TableColumn.YEAR:
                 return <NumericColumn {...props} {...dragProps} controls={controls} type={type} />;
+
+            case TableColumn.COMPOSER:
+                return <ComposerColumn {...props} {...dragProps} controls={controls} type={type} />;
 
             case TableColumn.DATE_ADDED:
                 return <DateColumn {...props} {...dragProps} controls={controls} type={type} />;
@@ -532,6 +280,11 @@ export const ItemTableListColumn = (props: ItemTableListColumn) => {
             case TableColumn.TITLE:
                 return <TitleColumn {...props} {...dragProps} controls={controls} type={type} />;
 
+            case TableColumn.TITLE_ARTIST:
+                return (
+                    <TitleArtistColumn {...props} {...dragProps} controls={controls} type={type} />
+                );
+
             case TableColumn.TITLE_COMBINED:
                 return (
                     <TitleCombinedColumn
@@ -547,6 +300,9 @@ export const ItemTableListColumn = (props: ItemTableListColumn) => {
 
             case TableColumn.USER_RATING:
                 return <RatingColumn {...props} {...dragProps} controls={controls} type={type} />;
+
+            case TableColumn.YEAR:
+                return <YearColumn {...props} {...dragProps} controls={controls} type={type} />;
 
             default:
                 return <DefaultColumn {...props} {...dragProps} controls={controls} type={type} />;
@@ -566,6 +322,9 @@ export const ItemTableListColumn = (props: ItemTableListColumn) => {
         case TableColumn.TITLE:
             return <TitleColumn {...props} {...dragProps} controls={controls} type={type} />;
 
+        case TableColumn.TITLE_ARTIST:
+            return <TitleArtistColumn {...props} {...dragProps} controls={controls} type={type} />;
+
         case TableColumn.TITLE_COMBINED:
             return (
                 <TitleCombinedColumn {...props} {...dragProps} controls={controls} type={type} />
@@ -576,7 +335,59 @@ export const ItemTableListColumn = (props: ItemTableListColumn) => {
     }
 };
 
-const NonMutedColumns = [TableColumn.TITLE, TableColumn.TITLE_COMBINED];
+export const ItemTableListColumn = memo(ItemTableListColumnBase, (prevProps, nextProps) => {
+    const prevItem = prevProps.getRowItem?.(prevProps.rowIndex);
+    const nextItem = nextProps.getRowItem?.(nextProps.rowIndex);
+
+    return (
+        prevProps.rowIndex === nextProps.rowIndex &&
+        prevProps.columnIndex === nextProps.columnIndex &&
+        prevProps.data === nextProps.data &&
+        prevProps.columns === nextProps.columns &&
+        prevProps.style === nextProps.style &&
+        prevProps.columnType === nextProps.columnType &&
+        prevProps.itemType === nextProps.itemType &&
+        prevProps.enableHeader === nextProps.enableHeader &&
+        prevProps.enableDrag === nextProps.enableDrag &&
+        prevProps.groups === nextProps.groups &&
+        prevProps.groupHeaderInfoByRowIndex === nextProps.groupHeaderInfoByRowIndex &&
+        prevProps.pinnedLeftColumnCount === nextProps.pinnedLeftColumnCount &&
+        prevProps.pinnedLeftColumnWidths === nextProps.pinnedLeftColumnWidths &&
+        prevProps.size === nextProps.size &&
+        prevProps.enableAlternateRowColors === nextProps.enableAlternateRowColors &&
+        prevProps.enableHorizontalBorders === nextProps.enableHorizontalBorders &&
+        prevProps.enableVerticalBorders === nextProps.enableVerticalBorders &&
+        prevProps.enableRowHoverHighlight === nextProps.enableRowHoverHighlight &&
+        prevProps.enableSelection === nextProps.enableSelection &&
+        prevProps.enableColumnResize === nextProps.enableColumnResize &&
+        prevProps.enableColumnReorder === nextProps.enableColumnReorder &&
+        prevProps.cellPadding === nextProps.cellPadding &&
+        prevItem === nextItem
+    );
+});
+
+const NonMutedColumns = [TableColumn.TITLE, TableColumn.TITLE_ARTIST, TableColumn.TITLE_COMBINED];
+
+export function isAlbumGroupingActive(columns: { id: string; isEnabled?: boolean }[]): boolean {
+    return columns.some((col) => col.id === TableColumn.ALBUM_GROUP && col.isEnabled);
+}
+
+export function isLastInAlbumGroup(
+    rowIndex: number,
+    getRowItem: ((index: number) => unknown) | undefined,
+    enableHeader: boolean | undefined,
+    dataLength: number,
+): boolean {
+    const item = getRowItem?.(rowIndex) as null | undefined | { album?: string };
+    if (!item?.album) return true;
+
+    const nextRowIndex = rowIndex + 1;
+    const maxRow = enableHeader ? dataLength + 1 : dataLength;
+    if (nextRowIndex >= maxRow) return true;
+
+    const nextItem = getRowItem?.(nextRowIndex) as null | undefined | { album?: string };
+    return !nextItem || nextItem.album !== item.album;
+}
 
 export const TableColumnTextContainer = (
     props: ItemTableListColumn & {
@@ -593,7 +404,9 @@ export const TableColumnTextContainer = (
     const containerRef = useRef<HTMLDivElement>(null);
     const isDataRow = props.enableHeader ? props.rowIndex > 0 : true;
     const dataIndex = props.enableHeader ? props.rowIndex - 1 : props.rowIndex;
-    const item = isDataRow ? props.data[props.rowIndex] : null;
+    const item = isDataRow
+        ? (props.getRowItem?.(props.rowIndex) ?? props.data[props.rowIndex])
+        : null;
     const itemRowId =
         item && typeof item === 'object' && 'id' in item
             ? props.internalState.extractRowId(item)
@@ -610,82 +423,22 @@ export const TableColumnTextContainer = (
             ? props.rowIndex === props.data.length
             : props.rowIndex === props.data.length - 1);
 
-    useEffect(() => {
-        if (!isDataRow || !containerRef.current) return;
-
-        const container = containerRef.current;
-        const rowIndex = props.rowIndex;
-
-        const handleMouseEnter = () => {
-            // Find all cells in the same row and add hover class
-            const allCells = document.querySelectorAll(
-                `[data-row-index="${props.tableId}-${rowIndex}"]`,
-            );
-            allCells.forEach((cell) => cell.classList.add(styles.rowHovered));
-        };
-
-        const handleMouseLeave = () => {
-            // Remove hover class from all cells in the same row
-            const allCells = document.querySelectorAll(
-                `[data-row-index="${props.tableId}-${rowIndex}"]`,
-            );
-            allCells.forEach((cell) => cell.classList.remove(styles.rowHovered));
-        };
-
-        container.addEventListener('mouseenter', handleMouseEnter);
-        container.addEventListener('mouseleave', handleMouseLeave);
-
-        return () => {
-            container.removeEventListener('mouseenter', handleMouseEnter);
-            container.removeEventListener('mouseleave', handleMouseLeave);
-        };
-    }, [isDataRow, props.rowIndex, props.enableRowHoverHighlight, props.tableId]);
-
     // Apply dragged over state to all cells in the row so border can span entire row
     useEffect(() => {
         if (!isDataRow || !containerRef.current) return;
+        const rowKey = `${props.tableId}-${props.rowIndex}`;
+        const edge =
+            props.isDraggedOver === 'top' || props.isDraggedOver === 'bottom'
+                ? props.isDraggedOver
+                : null;
 
-        const rowIndex = props.rowIndex;
-        const draggedOverState = props.isDraggedOver;
-
-        if (draggedOverState) {
-            // Find all cells in the same row and add dragged over class
-            const allCells = document.querySelectorAll(
-                `[data-row-index="${props.tableId}-${rowIndex}"]`,
-            );
-            allCells.forEach((cell, index) => {
-                if (draggedOverState === 'top') {
-                    cell.classList.add(styles.draggedOverTop);
-                    cell.classList.remove(styles.draggedOverBottom);
-                    // Mark first cell so border can span full width
-                    if (index === 0) {
-                        cell.classList.add(styles.draggedOverFirstCell);
-                    } else {
-                        cell.classList.remove(styles.draggedOverFirstCell);
-                    }
-                } else if (draggedOverState === 'bottom') {
-                    cell.classList.add(styles.draggedOverBottom);
-                    cell.classList.remove(styles.draggedOverTop);
-                    // Mark first cell so border can span full width
-                    if (index === 0) {
-                        cell.classList.add(styles.draggedOverFirstCell);
-                    } else {
-                        cell.classList.remove(styles.draggedOverFirstCell);
-                    }
-                }
-            });
-        } else {
-            // Remove dragged over classes from all cells in the same row
-            const allCells = document.querySelectorAll(
-                `[data-row-index="${props.tableId}-${rowIndex}"]`,
-            );
-            allCells.forEach((cell) => {
-                cell.classList.remove(styles.draggedOverTop);
-                cell.classList.remove(styles.draggedOverBottom);
-                cell.classList.remove(styles.draggedOverFirstCell);
-            });
-        }
-    }, [isDataRow, props.rowIndex, props.isDraggedOver, props.tableId]);
+        containerRef.current.dispatchEvent(
+            new CustomEvent('itl:row-drag-over', {
+                bubbles: true,
+                detail: { edge, rowKey },
+            }),
+        );
+    }, [isDataRow, props.isDraggedOver, props.rowIndex, props.tableId]);
 
     const handleClick = useDoubleClick({
         onDoubleClick: (event: React.MouseEvent<HTMLDivElement>) => {
@@ -751,11 +504,10 @@ export const TableColumnTextContainer = (
                 [styles.center]: props.columns[props.columnIndex].align === 'center',
                 [styles.compact]: props.size === 'compact',
                 [styles.dataRow]: isDataRow,
-                [styles.draggedOverBottom]: isDataRow && props.isDraggedOver === 'bottom',
-                [styles.draggedOverTop]: isDataRow && props.isDraggedOver === 'top',
                 [styles.dragging]: isDataRow && isDragging,
                 [styles.large]: props.size === 'large',
                 [styles.left]: props.columns[props.columnIndex].align === 'start',
+                [styles.noHorizontalPadding]: isNoHorizontalPaddingColumn(props.type),
                 [styles.paddingLg]: props.cellPadding === 'lg',
                 [styles.paddingMd]: props.cellPadding === 'md',
                 [styles.paddingSm]: props.cellPadding === 'sm',
@@ -768,7 +520,14 @@ export const TableColumnTextContainer = (
                     props.enableHorizontalBorders &&
                     props.enableHeader &&
                     props.rowIndex > 0 &&
-                    !isLastRow,
+                    (isAlbumGroupingActive(props.columns)
+                        ? isLastInAlbumGroup(
+                              props.rowIndex,
+                              props.getRowItem,
+                              !!props.enableHeader,
+                              props.data.length,
+                          )
+                        : props.rowIndex === 1 || !isLastRow),
                 [styles.withVerticalBorder]: props.enableVerticalBorders && !isLastColumn,
             })}
             data-row-index={isDataRow ? `${props.tableId}-${props.rowIndex}` : undefined}
@@ -806,7 +565,9 @@ export const TableColumnContainer = (
     const containerRef = useRef<HTMLDivElement>(null);
     const isDataRow = props.enableHeader ? props.rowIndex > 0 : true;
     const dataIndex = props.enableHeader ? props.rowIndex - 1 : props.rowIndex;
-    const item = isDataRow ? props.data[props.rowIndex] : null;
+    const item = isDataRow
+        ? (props.getRowItem?.(props.rowIndex) ?? props.data[props.rowIndex])
+        : null;
     const itemRowId =
         item && typeof item === 'object' && 'id' in item
             ? props.internalState.extractRowId(item)
@@ -823,82 +584,22 @@ export const TableColumnContainer = (
             ? props.rowIndex === props.data.length
             : props.rowIndex === props.data.length - 1);
 
-    useEffect(() => {
-        if (!isDataRow || !containerRef.current) return;
-
-        const container = containerRef.current;
-        const rowIndex = props.rowIndex;
-
-        const handleMouseEnter = () => {
-            // Find all cells in the same row and add hover class
-            const allCells = document.querySelectorAll(
-                `[data-row-index="${props.tableId}-${rowIndex}"]`,
-            );
-            allCells.forEach((cell) => cell.classList.add(styles.rowHovered));
-        };
-
-        const handleMouseLeave = () => {
-            // Remove hover class from all cells in the same row
-            const allCells = document.querySelectorAll(
-                `[data-row-index="${props.tableId}-${rowIndex}"]`,
-            );
-            allCells.forEach((cell) => cell.classList.remove(styles.rowHovered));
-        };
-
-        container.addEventListener('mouseenter', handleMouseEnter);
-        container.addEventListener('mouseleave', handleMouseLeave);
-
-        return () => {
-            container.removeEventListener('mouseenter', handleMouseEnter);
-            container.removeEventListener('mouseleave', handleMouseLeave);
-        };
-    }, [isDataRow, props.rowIndex, props.enableRowHoverHighlight, props.tableId]);
-
     // Apply dragged over state to all cells in the row so border can span entire row
     useEffect(() => {
         if (!isDataRow || !containerRef.current) return;
+        const rowKey = `${props.tableId}-${props.rowIndex}`;
+        const edge =
+            props.isDraggedOver === 'top' || props.isDraggedOver === 'bottom'
+                ? props.isDraggedOver
+                : null;
 
-        const rowIndex = props.rowIndex;
-        const draggedOverState = props.isDraggedOver;
-
-        if (draggedOverState) {
-            // Find all cells in the same row and add dragged over class
-            const allCells = document.querySelectorAll(
-                `[data-row-index="${props.tableId}-${rowIndex}"]`,
-            );
-            allCells.forEach((cell, index) => {
-                if (draggedOverState === 'top') {
-                    cell.classList.add(styles.draggedOverTop);
-                    cell.classList.remove(styles.draggedOverBottom);
-                    // Mark first cell so border can span full width
-                    if (index === 0) {
-                        cell.classList.add(styles.draggedOverFirstCell);
-                    } else {
-                        cell.classList.remove(styles.draggedOverFirstCell);
-                    }
-                } else if (draggedOverState === 'bottom') {
-                    cell.classList.add(styles.draggedOverBottom);
-                    cell.classList.remove(styles.draggedOverTop);
-                    // Mark first cell so border can span full width
-                    if (index === 0) {
-                        cell.classList.add(styles.draggedOverFirstCell);
-                    } else {
-                        cell.classList.remove(styles.draggedOverFirstCell);
-                    }
-                }
-            });
-        } else {
-            // Remove dragged over classes from all cells in the same row
-            const allCells = document.querySelectorAll(
-                `[data-row-index="${props.tableId}-${rowIndex}"]`,
-            );
-            allCells.forEach((cell) => {
-                cell.classList.remove(styles.draggedOverTop);
-                cell.classList.remove(styles.draggedOverBottom);
-                cell.classList.remove(styles.draggedOverFirstCell);
-            });
-        }
-    }, [isDataRow, props.rowIndex, props.isDraggedOver, props.tableId]);
+        containerRef.current.dispatchEvent(
+            new CustomEvent('itl:row-drag-over', {
+                bubbles: true,
+                detail: { edge, rowKey },
+            }),
+        );
+    }, [isDataRow, props.isDraggedOver, props.rowIndex, props.tableId]);
 
     const handleClick = useDoubleClick({
         onDoubleClick: (event: React.MouseEvent<HTMLDivElement>) => {
@@ -964,24 +665,34 @@ export const TableColumnContainer = (
                 [styles.center]: props.columns[props.columnIndex].align === 'center',
                 [styles.compact]: props.size === 'compact',
                 [styles.dataRow]: isDataRow,
-                [styles.draggedOverBottom]: isDataRow && props.isDraggedOver === 'bottom',
-                [styles.draggedOverTop]: isDataRow && props.isDraggedOver === 'top',
                 [styles.dragging]: isDataRow && isDragging,
                 [styles.large]: props.size === 'large',
                 [styles.left]: props.columns[props.columnIndex].align === 'start',
+                [styles.noHorizontalPadding]: isNoHorizontalPaddingColumn(props.type),
                 [styles.paddingLg]: props.cellPadding === 'lg',
                 [styles.paddingMd]: props.cellPadding === 'md',
                 [styles.paddingSm]: props.cellPadding === 'sm',
                 [styles.paddingXl]: props.cellPadding === 'xl',
                 [styles.paddingXs]: props.cellPadding === 'xs',
                 [styles.right]: props.columns[props.columnIndex].align === 'end',
-                [styles.rowHoverHighlightEnabled]: isDataRow && props.enableRowHoverHighlight,
-                [styles.rowSelected]: isDataRow && isSelected,
+                [styles.rowHoverHighlightEnabled]:
+                    isDataRow &&
+                    props.enableRowHoverHighlight &&
+                    props.type !== TableColumn.ALBUM_GROUP,
+                [styles.rowSelected]:
+                    isDataRow && isSelected && props.type !== TableColumn.ALBUM_GROUP,
                 [styles.withHorizontalBorder]:
                     props.enableHorizontalBorders &&
                     props.enableHeader &&
                     props.rowIndex > 0 &&
-                    !isLastRow,
+                    (isAlbumGroupingActive(props.columns)
+                        ? isLastInAlbumGroup(
+                              props.rowIndex,
+                              props.getRowItem,
+                              !!props.enableHeader,
+                              props.data.length,
+                          )
+                        : props.rowIndex === 1 || !isLastRow),
                 [styles.withVerticalBorder]: props.enableVerticalBorders && !isLastColumn,
             })}
             data-row-index={isDataRow ? `${props.tableId}-${props.rowIndex}` : undefined}
@@ -1187,6 +898,7 @@ export const TableColumnHeaderContainer = (
                 [styles.headerDraggedOverLeft]: isDraggedOver === 'left',
                 [styles.headerDraggedOverRight]: isDraggedOver === 'right',
                 [styles.headerDragging]: isDragging,
+                [styles.noHorizontalPadding]: isNoHorizontalPaddingColumn(props.type),
                 [styles.paddingLg]: props.cellPadding === 'lg',
                 [styles.paddingMd]: props.cellPadding === 'md',
                 [styles.paddingSm]: props.cellPadding === 'sm',
@@ -1218,7 +930,7 @@ export const TableColumnHeaderContainer = (
     );
 };
 
-const columnLabelMap: Record<TableColumn, ReactNode | string> = {
+export const columnLabelMap: Record<TableColumn, ReactNode | string> = {
     [TableColumn.ACTIONS]: (
         <Flex className={styles.headerIconWrapper}>
             <Icon fill="default" icon="ellipsisHorizontal" />
@@ -1229,6 +941,9 @@ const columnLabelMap: Record<TableColumn, ReactNode | string> = {
         postProcess: 'upperCase',
     }) as string,
     [TableColumn.ALBUM_COUNT]: i18n.t('table.column.albumCount', {
+        postProcess: 'upperCase',
+    }) as string,
+    [TableColumn.ALBUM_GROUP]: i18n.t('table.config.label.albumGroup', {
         postProcess: 'upperCase',
     }) as string,
     [TableColumn.ARTIST]: i18n.t('table.column.artist', { postProcess: 'upperCase' }) as string,
@@ -1243,6 +958,9 @@ const columnLabelMap: Record<TableColumn, ReactNode | string> = {
     [TableColumn.CHANNELS]: i18n.t('table.column.channels', { postProcess: 'upperCase' }) as string,
     [TableColumn.CODEC]: i18n.t('table.column.codec', { postProcess: 'upperCase' }) as string,
     [TableColumn.COMMENT]: i18n.t('table.column.comment', { postProcess: 'upperCase' }) as string,
+    [TableColumn.COMPOSER]: i18n.t('table.config.label.composer', {
+        postProcess: 'upperCase',
+    }) as string,
     [TableColumn.DATE_ADDED]: i18n.t('table.column.dateAdded', {
         postProcess: 'upperCase',
     }) as string,
@@ -1292,6 +1010,9 @@ const columnLabelMap: Record<TableColumn, ReactNode | string> = {
         postProcess: 'upperCase',
     }) as string,
     [TableColumn.TITLE]: i18n.t('table.column.title', { postProcess: 'upperCase' }) as string,
+    [TableColumn.TITLE_ARTIST]: i18n.t('table.column.title', {
+        postProcess: 'upperCase',
+    }) as string,
     [TableColumn.TITLE_COMBINED]: i18n.t('table.column.title', {
         postProcess: 'upperCase',
     }) as string,
@@ -1305,9 +1026,11 @@ const columnLabelMap: Record<TableColumn, ReactNode | string> = {
             <Icon icon="favorite" />
         </Flex>
     ),
-    [TableColumn.USER_RATING]: i18n.t('table.column.rating', {
-        postProcess: 'upperCase',
-    }) as string,
+    [TableColumn.USER_RATING]: (
+        <Flex className={styles.headerIconWrapper}>
+            <Icon icon="star" />
+        </Flex>
+    ),
     [TableColumn.YEAR]: i18n.t('table.column.releaseYear', { postProcess: 'upperCase' }) as string,
 };
 

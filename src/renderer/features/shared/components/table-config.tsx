@@ -11,7 +11,7 @@ import {
 import { disableNativeDragPreview } from '@atlaskit/pragmatic-drag-and-drop/element/disable-native-drag-preview';
 import clsx from 'clsx';
 import Fuse, { type FuseResultMatch } from 'fuse.js';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import styles from './table-config.module.css';
@@ -21,7 +21,12 @@ import {
     ListConfigBooleanControl,
     ListConfigTable,
 } from '/@/renderer/features/shared/components/list-config-menu';
-import { ItemListSettings, useSettingsStore, useSettingsStoreActions } from '/@/renderer/store';
+import {
+    type DataTableProps,
+    ItemListSettings,
+    useSettingsStore,
+    useSettingsStoreActions,
+} from '/@/renderer/store';
 import { ActionIcon, ActionIconGroup } from '/@/shared/components/action-icon/action-icon';
 import { Badge } from '/@/shared/components/badge/badge';
 import { Checkbox } from '/@/shared/components/checkbox/checkbox';
@@ -39,6 +44,7 @@ import { dndUtils, DragData, DragOperation, DragTarget } from '/@/shared/types/d
 import { ItemListKey, ListPaginationType } from '/@/shared/types/types';
 
 interface TableConfigProps {
+    enablePinColumnButtons?: boolean;
     extraOptions?: {
         component: React.ReactNode;
         id: string;
@@ -52,18 +58,36 @@ interface TableConfigProps {
         };
     };
     tableColumnsData: { label: string; value: string }[];
+    tableKey?: 'detail' | 'main';
 }
 
 export const TableConfig = ({
+    enablePinColumnButtons = true,
     extraOptions,
     listKey,
     optionsConfig,
     tableColumnsData,
+    tableKey = 'main',
 }: TableConfigProps) => {
     const { t } = useTranslation();
 
     const list = useSettingsStore((state) => state.lists[listKey]) as ItemListSettings;
     const { setList } = useSettingsStoreActions();
+
+    const table = tableKey === 'detail' ? (list?.detail ?? list?.table) : list?.table;
+
+    const setTableUpdate = useCallback(
+        (patch: Partial<DataTableProps>) => {
+            if (tableKey === 'detail') {
+                setList(listKey, { detail: patch } as Parameters<
+                    ReturnType<typeof useSettingsStoreActions>['setList']
+                >[1]);
+            } else {
+                setList(listKey, { table: patch });
+            }
+        },
+        [listKey, setList, tableKey],
+    );
 
     const advancedSettings = useMemo(() => {
         const allOptions = [
@@ -152,12 +176,12 @@ export const TableConfig = ({
                             },
                         ]}
                         onChange={(value) =>
-                            setList(listKey, {
-                                table: { size: value as 'compact' | 'default' },
+                            setTableUpdate({
+                                size: value as 'compact' | 'default' | 'large',
                             })
                         }
                         size="sm"
-                        value={list.table.size}
+                        value={table?.size ?? 'default'}
                         w="100%"
                     />
                 ),
@@ -169,10 +193,20 @@ export const TableConfig = ({
             {
                 component: (
                     <ListConfigBooleanControl
-                        onChange={(e) =>
-                            setList(listKey, { table: { enableRowHoverHighlight: e } })
-                        }
-                        value={list.table.enableRowHoverHighlight}
+                        onChange={(e) => setTableUpdate({ enableHeader: e })}
+                        value={table.enableHeader}
+                    />
+                ),
+                id: 'enableHeader',
+                label: t('table.config.general.showHeader', {
+                    postProcess: 'sentenceCase',
+                }),
+            },
+            {
+                component: (
+                    <ListConfigBooleanControl
+                        onChange={(e) => setTableUpdate({ enableRowHoverHighlight: e })}
+                        value={table.enableRowHoverHighlight}
                     />
                 ),
                 id: 'enableRowHoverHighlight',
@@ -183,10 +217,8 @@ export const TableConfig = ({
             {
                 component: (
                     <ListConfigBooleanControl
-                        onChange={(e) =>
-                            setList(listKey, { table: { enableAlternateRowColors: e } })
-                        }
-                        value={list.table.enableAlternateRowColors}
+                        onChange={(e) => setTableUpdate({ enableAlternateRowColors: e })}
+                        value={table.enableAlternateRowColors}
                     />
                 ),
                 id: 'enableAlternateRowColors',
@@ -197,10 +229,8 @@ export const TableConfig = ({
             {
                 component: (
                     <ListConfigBooleanControl
-                        onChange={(e) =>
-                            setList(listKey, { table: { enableHorizontalBorders: e } })
-                        }
-                        value={list.table.enableHorizontalBorders}
+                        onChange={(e) => setTableUpdate({ enableHorizontalBorders: e })}
+                        value={table.enableHorizontalBorders}
                     />
                 ),
                 id: 'enableHorizontalBorders',
@@ -211,8 +241,8 @@ export const TableConfig = ({
             {
                 component: (
                     <ListConfigBooleanControl
-                        onChange={(e) => setList(listKey, { table: { enableVerticalBorders: e } })}
-                        value={list.table.enableVerticalBorders}
+                        onChange={(e) => setTableUpdate({ enableVerticalBorders: e })}
+                        value={table.enableVerticalBorders}
                     />
                 ),
                 id: 'enableVerticalBorders',
@@ -223,14 +253,15 @@ export const TableConfig = ({
             {
                 component: (
                     <ListConfigBooleanControl
-                        onChange={(e) => setList(listKey, { table: { autoFitColumns: e } })}
-                        value={list.table.autoFitColumns}
+                        onChange={(e) => setTableUpdate({ autoFitColumns: e })}
+                        value={
+                            tableKey === 'main' ? (table as DataTableProps).autoFitColumns : false
+                        }
                     />
                 ),
                 id: 'autoFitColumns',
                 label: t('table.config.general.autoFitColumns', { postProcess: 'sentenceCase' }),
             },
-
             ...(extraOptions || []),
         ];
 
@@ -244,7 +275,18 @@ export const TableConfig = ({
                 return option;
             })
             .filter((option): option is NonNullable<typeof option> => option !== null);
-    }, [extraOptions, listKey, optionsConfig, setList, t, list]);
+    }, [
+        t,
+        list.pagination,
+        list.itemsPerPage,
+        table,
+        tableKey,
+        extraOptions,
+        setList,
+        listKey,
+        setTableUpdate,
+        optionsConfig,
+    ]);
 
     return (
         <>
@@ -252,11 +294,9 @@ export const TableConfig = ({
             <Divider />
             <TableColumnConfig
                 data={tableColumnsData}
-                listKey={listKey}
-                onChange={(columns) =>
-                    setList(listKey, { ...list, table: { ...list.table, columns } })
-                }
-                value={list.table.columns}
+                enablePinColumnButtons={enablePinColumnButtons}
+                onChange={(columns) => setTableUpdate({ columns })}
+                value={table.columns}
             />
         </>
     );
@@ -264,16 +304,24 @@ export const TableConfig = ({
 
 const TableColumnConfig = ({
     data,
-    listKey,
+    enablePinColumnButtons,
     onChange,
     value,
 }: {
     data: { label: string; value: string }[];
-    listKey: ItemListKey;
+    enablePinColumnButtons: boolean;
     onChange: (value: ItemTableListColumnConfig[]) => void;
     value: ItemTableListColumnConfig[];
 }) => {
     const { t } = useTranslation();
+
+    const valueRef = useRef(value);
+    const onChangeRef = useRef(onChange);
+
+    useLayoutEffect(() => {
+        valueRef.current = value;
+        onChangeRef.current = onChange;
+    });
 
     const labelMap = useMemo(() => {
         return data.reduce(
@@ -285,133 +333,97 @@ const TableColumnConfig = ({
         );
     }, [data]);
 
-    const handleChangeEnabled = useCallback(
-        (item: ItemTableListColumnConfig, checked: boolean) => {
-            const value = useSettingsStore.getState().lists[listKey]?.table.columns;
-            if (!value) return;
-            const index = value.findIndex((v) => v.id === item.id);
-            const newValues = [...value];
-            newValues[index] = { ...newValues[index], isEnabled: checked };
-            onChange(newValues);
-        },
-        [listKey, onChange],
-    );
+    const handleChangeEnabled = useCallback((item: ItemTableListColumnConfig, checked: boolean) => {
+        const currentValue = valueRef.current;
+        const index = currentValue.findIndex((v) => v.id === item.id);
+        const newValues = [...currentValue];
+        newValues[index] = { ...newValues[index], isEnabled: checked };
+        onChangeRef.current(newValues);
+    }, []);
 
-    const handleMoveUp = useCallback(
-        (item: ItemTableListColumnConfig) => {
-            const value = useSettingsStore.getState().lists[listKey]?.table.columns;
-            if (!value) return;
-            const index = value.findIndex((v) => v.id === item.id);
-            if (index === 0) return;
-            const newValues = [...value];
-            [newValues[index], newValues[index - 1]] = [newValues[index - 1], newValues[index]];
-            onChange(newValues);
-        },
-        [listKey, onChange],
-    );
+    const handleMoveUp = useCallback((item: ItemTableListColumnConfig) => {
+        const currentValue = valueRef.current;
+        const index = currentValue.findIndex((v) => v.id === item.id);
+        if (index === 0) return;
+        const newValues = [...currentValue];
+        [newValues[index], newValues[index - 1]] = [newValues[index - 1], newValues[index]];
+        onChangeRef.current(newValues);
+    }, []);
 
-    const handleMoveDown = useCallback(
-        (item: ItemTableListColumnConfig) => {
-            const value = useSettingsStore.getState().lists[listKey]?.table.columns;
-            if (!value) return;
-            const index = value.findIndex((v) => v.id === item.id);
-            if (index === value.length - 1) return;
-            const newValues = [...value];
-            [newValues[index], newValues[index + 1]] = [newValues[index + 1], newValues[index]];
-            onChange(newValues);
-        },
-        [listKey, onChange],
-    );
+    const handleMoveDown = useCallback((item: ItemTableListColumnConfig) => {
+        const currentValue = valueRef.current;
+        const index = currentValue.findIndex((v) => v.id === item.id);
+        if (index === currentValue.length - 1) return;
+        const newValues = [...currentValue];
+        [newValues[index], newValues[index + 1]] = [newValues[index + 1], newValues[index]];
+        onChangeRef.current(newValues);
+    }, []);
 
-    const handlePinToLeft = useCallback(
-        (item: ItemTableListColumnConfig) => {
-            const value = useSettingsStore.getState().lists[listKey]?.table.columns;
-            if (!value) return;
-            const index = value.findIndex((v) => v.id === item.id);
-            const newValues = [...value];
+    const handlePinToLeft = useCallback((item: ItemTableListColumnConfig) => {
+        const currentValue = valueRef.current;
+        const index = currentValue.findIndex((v) => v.id === item.id);
+        const newValues = [...currentValue];
 
-            const isPinned = newValues[index].pinned;
-            const isPinnedLeft = isPinned === 'left';
+        const isPinned = newValues[index].pinned;
+        const isPinnedLeft = isPinned === 'left';
 
-            if (isPinnedLeft) {
-                newValues[index] = { ...newValues[index], pinned: null };
-            } else {
-                newValues[index] = { ...newValues[index], pinned: 'left' };
-            }
+        if (isPinnedLeft) {
+            newValues[index] = { ...newValues[index], pinned: null };
+        } else {
+            newValues[index] = { ...newValues[index], pinned: 'left' };
+        }
 
-            onChange(newValues);
-        },
-        [listKey, onChange],
-    );
+        onChangeRef.current(newValues);
+    }, []);
 
-    const handlePinToRight = useCallback(
-        (item: ItemTableListColumnConfig) => {
-            const value = useSettingsStore.getState().lists[listKey]?.table.columns;
-            if (!value) return;
-            const index = value.findIndex((v) => v.id === item.id);
-            const newValues = [...value];
+    const handlePinToRight = useCallback((item: ItemTableListColumnConfig) => {
+        const currentValue = valueRef.current;
+        const index = currentValue.findIndex((v) => v.id === item.id);
+        const newValues = [...currentValue];
 
-            const isPinned = newValues[index].pinned;
-            const isPinnedRight = isPinned === 'right';
+        const isPinned = newValues[index].pinned;
+        const isPinnedRight = isPinned === 'right';
 
-            if (isPinnedRight) {
-                newValues[index] = { ...newValues[index], pinned: null };
-            } else {
-                newValues[index] = { ...newValues[index], pinned: 'right' };
-            }
+        if (isPinnedRight) {
+            newValues[index] = { ...newValues[index], pinned: null };
+        } else {
+            newValues[index] = { ...newValues[index], pinned: 'right' };
+        }
 
-            onChange(newValues);
-        },
-        [listKey, onChange],
-    );
+        onChangeRef.current(newValues);
+    }, []);
 
-    const handleAlignLeft = useCallback(
-        (item: ItemTableListColumnConfig) => {
-            const value = useSettingsStore.getState().lists[listKey]?.table.columns;
-            if (!value) return;
-            const index = value.findIndex((v) => v.id === item.id);
-            const newValues = [...value];
-            newValues[index] = { ...newValues[index], align: 'start' };
-            onChange(newValues);
-        },
-        [listKey, onChange],
-    );
+    const handleAlignLeft = useCallback((item: ItemTableListColumnConfig) => {
+        const currentValue = valueRef.current;
+        const index = currentValue.findIndex((v) => v.id === item.id);
+        const newValues = [...currentValue];
+        newValues[index] = { ...newValues[index], align: 'start' };
+        onChangeRef.current(newValues);
+    }, []);
 
-    const handleAlignCenter = useCallback(
-        (item: ItemTableListColumnConfig) => {
-            const value = useSettingsStore.getState().lists[listKey]?.table.columns;
-            if (!value) return;
-            const index = value.findIndex((v) => v.id === item.id);
-            const newValues = [...value];
-            newValues[index] = { ...newValues[index], align: 'center' };
-            onChange(newValues);
-        },
-        [listKey, onChange],
-    );
+    const handleAlignCenter = useCallback((item: ItemTableListColumnConfig) => {
+        const currentValue = valueRef.current;
+        const index = currentValue.findIndex((v) => v.id === item.id);
+        const newValues = [...currentValue];
+        newValues[index] = { ...newValues[index], align: 'center' };
+        onChangeRef.current(newValues);
+    }, []);
 
-    const handleAlignRight = useCallback(
-        (item: ItemTableListColumnConfig) => {
-            const value = useSettingsStore.getState().lists[listKey]?.table.columns;
-            if (!value) return;
-            const index = value.findIndex((v) => v.id === item.id);
-            const newValues = [...value];
-            newValues[index] = { ...newValues[index], align: 'end' };
-            onChange(newValues);
-        },
-        [listKey, onChange],
-    );
+    const handleAlignRight = useCallback((item: ItemTableListColumnConfig) => {
+        const currentValue = valueRef.current;
+        const index = currentValue.findIndex((v) => v.id === item.id);
+        const newValues = [...currentValue];
+        newValues[index] = { ...newValues[index], align: 'end' };
+        onChangeRef.current(newValues);
+    }, []);
 
-    const handleAutoSize = useCallback(
-        (item: ItemTableListColumnConfig, checked: boolean) => {
-            const value = useSettingsStore.getState().lists[listKey]?.table.columns;
-            if (!value) return;
-            const index = value.findIndex((v) => v.id === item.id);
-            const newValues = [...value];
-            newValues[index] = { ...newValues[index], autoSize: checked };
-            onChange(newValues);
-        },
-        [listKey, onChange],
-    );
+    const handleAutoSize = useCallback((item: ItemTableListColumnConfig, checked: boolean) => {
+        const currentValue = valueRef.current;
+        const index = currentValue.findIndex((v) => v.id === item.id);
+        const newValues = [...currentValue];
+        newValues[index] = { ...newValues[index], autoSize: checked };
+        onChangeRef.current(newValues);
+    }, []);
 
     const handleRowWidth = useCallback(
         (item: ItemTableListColumnConfig, number: number | string) => {
@@ -427,14 +439,13 @@ const TableColumnConfig = ({
                 number = 2000;
             }
 
-            const value = useSettingsStore.getState().lists[listKey]?.table.columns;
-            if (!value) return;
-            const index = value.findIndex((v) => v.id === item.id);
-            const newValues = [...value];
+            const currentValue = valueRef.current;
+            const index = currentValue.findIndex((v) => v.id === item.id);
+            const newValues = [...currentValue];
             newValues[index] = { ...newValues[index], width: number };
-            onChange(newValues);
+            onChangeRef.current(newValues);
         },
-        [listKey, onChange],
+        [],
     );
 
     const [searchColumns, setSearchColumns] = useDebouncedState('', 300);
@@ -465,25 +476,20 @@ const TableColumnConfig = ({
         }));
     }, [value, searchColumns, fuse]);
 
-    const handleReorder = useCallback(
-        (idFrom: string, idTo: string, edge: Edge | null) => {
-            const currentValue = useSettingsStore.getState().lists[listKey]?.table.columns;
-            if (!currentValue) return;
+    const handleReorder = useCallback((idFrom: string, idTo: string, edge: Edge | null) => {
+        const currentValue = valueRef.current;
+        const idList = currentValue.map((item) => item.id);
+        const newIdOrder = dndUtils.reorderById({
+            edge,
+            idFrom,
+            idTo,
+            list: idList,
+        });
 
-            const idList = currentValue.map((item) => item.id);
-            const newIdOrder = dndUtils.reorderById({
-                edge,
-                idFrom,
-                idTo,
-                list: idList,
-            });
-
-            // Map the new ID order back to full items
-            const newOrder = newIdOrder.map((id) => currentValue.find((item) => item.id === id)!);
-            onChange(newOrder);
-        },
-        [listKey, onChange],
-    );
+        // Map the new ID order back to full items
+        const newOrder = newIdOrder.map((id) => currentValue.find((item) => item.id === id)!);
+        onChangeRef.current(newOrder);
+    }, []);
 
     return (
         <Stack gap="xs">
@@ -500,6 +506,7 @@ const TableColumnConfig = ({
             <div style={{ userSelect: 'none' }}>
                 {filteredColumns.map(({ item, matches }) => (
                     <TableColumnItem
+                        enablePinColumnButtons={enablePinColumnButtons}
                         handleAlignCenter={handleAlignCenter}
                         handleAlignLeft={handleAlignLeft}
                         handleAlignRight={handleAlignRight}
@@ -543,6 +550,7 @@ const DragHandle = ({
 
 const TableColumnItem = memo(
     ({
+        enablePinColumnButtons,
         handleAlignCenter,
         handleAlignLeft,
         handleAlignRight,
@@ -558,6 +566,7 @@ const TableColumnItem = memo(
         label,
         matches,
     }: {
+        enablePinColumnButtons: boolean;
         handleAlignCenter: (item: ItemTableListColumnConfig) => void;
         handleAlignLeft: (item: ItemTableListColumnConfig) => void;
         handleAlignRight: (item: ItemTableListColumnConfig) => void;
@@ -694,32 +703,34 @@ const TableColumnItem = memo(
                             variant="subtle"
                         />
                     </ActionIconGroup>
-                    <ActionIconGroup className={styles.group}>
-                        <ActionIcon
-                            icon="arrowLeftToLine"
-                            iconProps={{ size: 'md' }}
-                            onClick={() => handlePinToLeft(item)}
-                            size="xs"
-                            tooltip={{
-                                label: t('table.config.general.pinToLeft', {
-                                    postProcess: 'sentenceCase',
-                                }),
-                            }}
-                            variant={item.pinned === 'left' ? 'filled' : 'subtle'}
-                        />
-                        <ActionIcon
-                            icon="arrowRightToLine"
-                            iconProps={{ size: 'md' }}
-                            onClick={() => handlePinToRight(item)}
-                            size="xs"
-                            tooltip={{
-                                label: t('table.config.general.pinToRight', {
-                                    postProcess: 'sentenceCase',
-                                }),
-                            }}
-                            variant={item.pinned === 'right' ? 'filled' : 'subtle'}
-                        />
-                    </ActionIconGroup>
+                    {enablePinColumnButtons && (
+                        <ActionIconGroup className={styles.group}>
+                            <ActionIcon
+                                icon="arrowLeftToLine"
+                                iconProps={{ size: 'md' }}
+                                onClick={() => handlePinToLeft(item)}
+                                size="xs"
+                                tooltip={{
+                                    label: t('table.config.general.pinToLeft', {
+                                        postProcess: 'sentenceCase',
+                                    }),
+                                }}
+                                variant={item.pinned === 'left' ? 'filled' : 'subtle'}
+                            />
+                            <ActionIcon
+                                icon="arrowRightToLine"
+                                iconProps={{ size: 'md' }}
+                                onClick={() => handlePinToRight(item)}
+                                size="xs"
+                                tooltip={{
+                                    label: t('table.config.general.pinToRight', {
+                                        postProcess: 'sentenceCase',
+                                    }),
+                                }}
+                                variant={item.pinned === 'right' ? 'filled' : 'subtle'}
+                            />
+                        </ActionIconGroup>
+                    )}
                     <ActionIconGroup className={styles.group}>
                         <ActionIcon
                             icon="alignLeft"
@@ -762,25 +773,18 @@ const TableColumnItem = memo(
                         className={clsx(styles.group, styles.numberInput)}
                         hideControls={false}
                         leftSection={
-                            <>
-                                {item.pinned === null && (
-                                    <Tooltip
-                                        label={t('table.config.general.autosize', {
-                                            postProcess: 'sentenceCase',
-                                        })}
-                                    >
-                                        <Checkbox
-                                            checked={item.autoSize}
-                                            disabled={item.pinned !== null}
-                                            id={item.id}
-                                            onChange={(e) =>
-                                                handleAutoSize(item, e.currentTarget.checked)
-                                            }
-                                            size="xs"
-                                        />
-                                    </Tooltip>
-                                )}
-                            </>
+                            <Tooltip
+                                label={t('table.config.general.autosize', {
+                                    postProcess: 'sentenceCase',
+                                })}
+                            >
+                                <Checkbox
+                                    checked={item.autoSize}
+                                    id={item.id}
+                                    onChange={(e) => handleAutoSize(item, e.currentTarget.checked)}
+                                    size="xs"
+                                />
+                            </Tooltip>
                         }
                         max={2000}
                         min={0}
@@ -799,6 +803,7 @@ const TableColumnItem = memo(
     (prevProps, nextProps) => {
         // Custom comparison function for better memoization
         return (
+            prevProps.enablePinColumnButtons === nextProps.enablePinColumnButtons &&
             prevProps.item.id === nextProps.item.id &&
             prevProps.item.isEnabled === nextProps.item.isEnabled &&
             prevProps.item.autoSize === nextProps.item.autoSize &&

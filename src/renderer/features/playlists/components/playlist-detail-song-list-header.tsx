@@ -41,7 +41,7 @@ export const PlaylistDetailSongListHeader = ({
 
     const detailQuery = useQuery({
         ...playlistsQueries.detail({ query: { id: playlistId }, serverId: server?.id }),
-        initialData: location.state?.item,
+        placeholderData: location.state?.item,
     });
 
     const playlistDuration = detailQuery?.data?.duration;
@@ -93,9 +93,16 @@ export const PlaylistDetailSongListHeader = ({
                 </PageHeader>
             ) : (
                 <LibraryHeader
+                    compact
                     imageUrl={imageUrl}
-                    item={{ route: AppRoute.PLAYLISTS, type: LibraryItem.PLAYLIST }}
-                    title={detailQuery?.data?.name}
+                    item={{
+                        imageId: detailQuery?.data?.imageId,
+                        imageUrl: detailQuery?.data?.imageUrl,
+                        route: AppRoute.PLAYLISTS,
+                        type: LibraryItem.PLAYLIST,
+                    }}
+                    title={detailQuery?.data?.name || ''}
+                    topRight={<ListSearchInput />}
                 >
                     <LibraryHeaderMenu
                         onPlay={(type) => handlePlay(type)}
